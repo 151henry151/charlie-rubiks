@@ -5,6 +5,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-03-20
+
+### Added
+
+- Load `cubejs` (`lib/cube.js`, `lib/solve.js`) from jsDelivr; add `getSolverFacelets()` (U R F D L B order) and async Kociemba solve via `setTimeout(0)`.
+- Wire “Show Solve” / “Watch Solve” to Kociemba (loading state on buttons); label panel “Kociemba solution”; handle already-solved and solver errors.
+
+### Changed
+
+- Replace inverse-scramble solution with two-phase solver output; enable “Watch Solve” when the cube is unsolved (`updateWatchButton`).
+
 ## [0.3.3] - 2026-03-18
 
 ### Added
