@@ -5,6 +5,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-03-18
+
+### Changed
+
+- Replace mouse face-turn heuristic with view-independent drag: project face tangent axes to screen space, compare drag to dominant axis, derive turn direction from `cross(faceNormal, tangent)` vs camera; ignore drags under 15px.
+
 ## [0.3.0] - 2026-03-18
 
 ### Changed

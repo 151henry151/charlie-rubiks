@@ -29,7 +29,7 @@
       min-height: 0;
       position: relative;
     }
-    canvas { display: block; width: 100% !important; height: 100% !important; }
+    canvas { display: block; width: 100% !important; height: 100% !important; touch-action: none; }
     #hud {
       flex-shrink: 0;
       padding: 12px 16px 20px;
@@ -479,6 +479,28 @@
     return { axis: ax, angle: k * h * sign };
   }
 
+  function orthonormalTangentBasis(n) {
+    const up = new THREE.Vector3(0, 1, 0);
+    let t1 = new THREE.Vector3().crossVectors(n, up);
+    if (t1.lengthSq() < 1e-10) t1 = new THREE.Vector3().crossVectors(n, new THREE.Vector3(1, 0, 0));
+    t1.normalize();
+    const t2 = new THREE.Vector3().crossVectors(n, t1).normalize();
+    return [t1, t2];
+  }
+
+  function worldToScreenPixel(v, cam, el) {
+    const p = v.clone().project(cam);
+    const w = el.clientWidth;
+    const h = el.clientHeight;
+    return new THREE.Vector2((p.x + 1) * 0.5 * w, (-p.y + 1) * 0.5 * h);
+  }
+
+  function faceLetterFromNormal(n) {
+    if (Math.abs(n.y) >= Math.abs(n.x) && Math.abs(n.y) >= Math.abs(n.z)) return n.y > 0 ? 'U' : 'D';
+    if (Math.abs(n.z) >= Math.abs(n.x)) return n.z > 0 ? 'F' : 'B';
+    return n.x > 0 ? 'R' : 'L';
+  }
+
   function snapCubieGrid(c) {
     c.userData.ix = Math.round(c.position.x / SP);
     c.userData.iy = Math.round(c.position.y / SP);
@@ -640,10 +662,12 @@
       const faceIdx = Math.floor(hit.faceIndex / 2);
       const normals = [new THREE.Vector3(1,0,0), new THREE.Vector3(-1,0,0), new THREE.Vector3(0,1,0), new THREE.Vector3(0,-1,0), new THREE.Vector3(0,0,1), new THREE.Vector3(0,0,-1)];
       const worldN = normals[faceIdx].clone().transformDirection(hit.object.matrixWorld);
+      const faceIdx = Math.floor(hit.faceIndex / 2);
       drag = {
         x: e.clientX, y: e.clientY,
         cubie: hit.object,
         normal: worldN.normalize(),
+        faceIdx,
         hitPoint: hit.point.clone(),
         ix: hit.object.userData.ix, iy: hit.object.userData.iy, iz: hit.object.userData.iz
       };
@@ -660,36 +684,36 @@
       const dy = e.clientY - drag.y;
       const dist = Math.hypot(dx, dy);
       controls.enabled = true;
-      if (dist < 20) { drag = null; return; }
-
-      const v = new THREE.Vector3();
-      camera.getWorldDirection(v);
-      const right = new THREE.Vector3().crossVectors(v, new THREE.Vector3(0, 1, 0));
-      if (right.lengthSq() < 0.01) right.set(1, 0, 0);
-      right.normalize();
-      const up = new THREE.Vector3().crossVectors(right, v).normalize();
-      const dragW = right.clone().multiplyScalar(dx).add(up.clone().multiplyScalar(-dy)).normalize();
+      if (dist < 15) { drag = null; return; }
 
       const n = drag.normal;
-      let face;
-      if (Math.abs(n.y) >= Math.abs(n.x) && Math.abs(n.y) >= Math.abs(n.z))
-        face = n.y > 0 ? 'U' : 'D';
-      else if (Math.abs(n.z) >= Math.abs(n.x))
-        face = n.z > 0 ? 'F' : 'B';
-      else
-        face = n.x > 0 ? 'R' : 'L';
+      const face = faceLetterFromNormal(n);
+      const [e1, e2] = orthonormalTangentBasis(n);
+      const origin = drag.hitPoint;
+      const el = renderer.domElement;
+      const eps = 0.38;
+      const s0 = worldToScreenPixel(origin, camera, el);
+      const s1 = worldToScreenPixel(origin.clone().add(e1.clone().multiplyScalar(eps)), camera, el);
+      const s2 = worldToScreenPixel(origin.clone().add(e2.clone().multiplyScalar(eps)), camera, el);
+      let u1 = s1.clone().sub(s0);
+      let u2 = s2.clone().sub(s0);
+      if (u1.lengthSq() < 1e-8 || u2.lengthSq() < 1e-8) { drag = null; return; }
+      u1.normalize();
+      u2.sub(u1.clone().multiplyScalar(u2.dot(u1)));
+      if (u2.lengthSq() < 1e-10) { drag = null; return; }
+      u2.normalize();
 
-      const ax = new THREE.Vector3();
-      if (face === 'U' || face === 'D') ax.set(0, 1, 0);
-      else if (face === 'R' || face === 'L') ax.set(1, 0, 0);
-      else ax.set(0, 0, 1);
+      const dragPix = new THREE.Vector2(dx, dy);
+      const a = dragPix.dot(u1);
+      const b = dragPix.dot(u2);
+      if (Math.abs(a) < 1e-6 && Math.abs(b) < 1e-6) { drag = null; return; }
 
-      const fromC = drag.hitPoint.clone().sub(drag.cubie.position);
-      const t1 = new THREE.Vector3().crossVectors(ax, fromC);
-      if (t1.lengthSq() < 1e-6) t1.crossVectors(ax, new THREE.Vector3(0, 1, 0));
-      t1.normalize();
-      const t2 = new THREE.Vector3().crossVectors(ax, t1).normalize();
-      const prime = dragW.dot(t2) < 0;
+      const useFirst = Math.abs(a) >= Math.abs(b);
+      const sign = useFirst ? Math.sign(a) || 1 : Math.sign(b) || 1;
+      const tangent = useFirst ? e1.clone().multiplyScalar(sign) : e2.clone().multiplyScalar(sign);
+      const viewDir = new THREE.Vector3().subVectors(camera.position, origin).normalize();
+      const rotPole = new THREE.Vector3().crossVectors(n, tangent);
+      let prime = rotPole.dot(viewDir) < 0;
       const move = { face, prime, double: false };
       if (face === 'D' || face === 'B' || face === 'L') move.prime = !move.prime;
 
