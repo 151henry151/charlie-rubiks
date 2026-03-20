@@ -537,6 +537,23 @@
     if (btn) btn.disabled = isSolvedStickers();
   }
 
+  function selfTestSliceCycles() {
+    const save = stickers.map(f => f.slice());
+    try {
+      const faces = ['M', 'E', 'S'];
+      for (let k = 0; k < 3; k++) {
+        for (let i = 0; i < 4; i++) applyMoveToStickers({ face: faces[k], prime: false, double: false });
+        if (!isSolvedStickers()) {
+          console.warn('charlie-rubiks self-test FAIL: ' + faces[k] + '^4 not identity');
+          return;
+        }
+      }
+      console.log('charlie-rubiks self-test OK: M^4, E^4, S^4 return to solved');
+    } finally {
+      stickers = save.map(f => f.slice());
+    }
+  }
+
   function getSliceCubies(face) {
     const eps = 0.2;
     return cubies.filter(c => {
@@ -951,6 +968,7 @@
     onResize();
     animate();
     updateWatchButton();
+    selfTestSliceCycles();
     document.getElementById('wrap').classList.add('ready');
   }
 
