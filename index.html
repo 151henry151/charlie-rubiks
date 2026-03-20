@@ -119,7 +119,7 @@
       transition: max-height 0.4s ease, opacity 0.3s ease, padding 0.3s ease;
     }
     #legend.open {
-      max-height: 320px;
+      max-height: 520px;
       opacity: 1;
       padding: 14px 16px;
     }
@@ -137,6 +137,15 @@
       border-radius: 3px;
       border: 1px solid #444;
       margin-right: 4px;
+    }
+    .face-swatch {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      margin-right: 6px;
+      vertical-align: middle;
+      border: 1px solid rgba(255,255,255,0.25);
     }
     #watch-bar {
       display: none;
@@ -172,11 +181,31 @@
   <div id="title">RUBIK</div>
   <button type="button" class="btn secondary" id="legend-toggle" aria-expanded="false">Shortcuts</button>
   <div id="legend" aria-hidden="true">
+    <h3>WCA / SINGMASTER</h3>
+    <div style="font-size:10px;line-height:1.7;margin-bottom:10px;opacity:0.95">
+      Moves use standard notation: <strong>'</strong> = quarter-turn CCW on that face, <strong>2</strong> = half turn.
+      Faces are fixed to the cube (not the viewer): <strong>F</strong> = front toward you, <strong>R</strong> = your right.
+    </div>
+    <h3>FACES (WCA COLORS)</h3>
+    <div style="font-size:10px;line-height:1.85">
+      <div><span class="face-swatch" style="background:#fff"></span><strong>U</strong> Up · white</div>
+      <div><span class="face-swatch" style="background:#ffd500"></span><strong>D</strong> Down · yellow</div>
+      <div><span class="face-swatch" style="background:#009b48"></span><strong>F</strong> Front · green</div>
+      <div><span class="face-swatch" style="background:#0051ba"></span><strong>B</strong> Back · blue</div>
+      <div><span class="face-swatch" style="background:#c41e3a"></span><strong>R</strong> Right · red</div>
+      <div><span class="face-swatch" style="background:#ff5800"></span><strong>L</strong> Left · orange</div>
+    </div>
+    <h3 style="margin-top:12px">SLICES</h3>
+    <div style="font-size:10px;line-height:1.65;margin-bottom:8px">
+      <strong>M</strong> (middle, L–R): same direction as <strong>L</strong>.<br>
+      <strong>E</strong> (equatorial, U–D): same direction as <strong>D</strong>.<br>
+      <strong>S</strong> (standing, F–B): same direction as <strong>F</strong>.
+    </div>
     <h3>KEYBOARD</h3>
     <div><kbd>U</kbd><kbd>D</kbd><kbd>R</kbd><kbd>L</kbd><kbd>F</kbd><kbd>B</kbd> face CW</div>
-    <div><kbd>Shift</kbd> + same → CCW</div>
+    <div><kbd>Shift</kbd> + same → CCW (<kbd>'</kbd>)</div>
     <div><kbd>M</kbd> <kbd>E</kbd> <kbd>S</kbd> slices (+ Shift)</div>
-    <div style="margin-top:8px">Right-drag orbit · Wheel zoom</div>
+    <div style="margin-top:8px">Left-drag orbit · Right-drag pan · Wheel zoom</div>
     <div>Drag on face to turn</div>
   </div>
   <div id="wrap">
@@ -207,6 +236,7 @@
 (function () {
   'use strict';
 
+  /* WCA Article 4d: U=white, D=yellow, F=green, B=blue, R=red, L=orange (+Y up, +Z front) */
   const COL = {
     W: 0xffffff, Y: 0xffd500, R: 0xc41e3a, O: 0xff5800,
     B: 0x0051ba, G: 0x009b48, X: 0x0a0a0c
@@ -512,6 +542,7 @@
 
   function buildCubie(ix, iy, iz) {
     const mats = [];
+    /* BoxGeometry material order: +X, -X, +Y, -Y, +Z, -Z → R, L, U, D, F, B (WCA) */
     const faces = [
       { dir: new THREE.Vector3(1, 0, 0), col: ix === 1 ? 'R' : 'X' },
       { dir: new THREE.Vector3(-1, 0, 0), col: ix === -1 ? 'O' : 'X' },
@@ -545,7 +576,8 @@
     scene.background = new THREE.Color(0x0d0d0f);
 
     camera = new THREE.PerspectiveCamera(45, host.clientWidth / host.clientHeight, 0.1, 100);
-    camera.position.set(4.2, 3.5, 5.2);
+    /* Default view: white (U, +Y) up, green (F, +Z) toward viewer */
+    camera.position.set(2.6, 2.35, 4.35);
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(host.clientWidth, host.clientHeight);
