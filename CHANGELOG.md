@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3] - 2026-03-18
+
+### Added
+
+- Detect solved state after each move; show “Solved!” overlay with move count (fade after 4s) and brief emissive pulse on cubies.
+- Fire celebration only when the cube transitions from unsolved to solved (skip initial pristine solved state).
+
 ## [0.3.2] - 2026-03-18
 
 ### Added

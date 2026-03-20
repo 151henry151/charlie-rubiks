@@ -175,9 +175,48 @@
       color: rgba(255,255,255,0.35);
       pointer-events: none;
     }
+    #solved-overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 40;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+    #solved-overlay.visible {
+      opacity: 1;
+    }
+    #solved-overlay .solved-card {
+      background: rgba(8, 14, 22, 0.92);
+      border: 1px solid rgba(0, 255, 200, 0.35);
+      border-radius: 12px;
+      padding: 22px 32px;
+      text-align: center;
+      box-shadow: 0 0 40px rgba(0, 200, 180, 0.15);
+    }
+    #solved-overlay h2 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 22px;
+      letter-spacing: 0.12em;
+      color: #7f9;
+      margin-bottom: 8px;
+    }
+    #solved-overlay .solved-moves {
+      font-size: 14px;
+      color: #9ab;
+    }
   </style>
 </head>
 <body>
+  <div id="solved-overlay" aria-live="polite" aria-hidden="true">
+    <div class="solved-card">
+      <h2>✓ Solved!</h2>
+      <div class="solved-moves">Moves: <span id="solved-move-display">0</span></div>
+    </div>
+  </div>
   <div id="title">RUBIK</div>
   <button type="button" class="btn secondary" id="legend-toggle" aria-expanded="false">Shortcuts</button>
   <div id="legend" aria-hidden="true">
@@ -254,6 +293,7 @@
   let scrambleMoves = [];
   let lastScrambleNotation = '';
   let userMoveDuringSession = false;
+  let wasEverUnsolved = false;
 
   const faceNames = ['U', 'D', 'F', 'B', 'R', 'L'];
   let stickers = [];
@@ -495,6 +535,54 @@
     return new THREE.Vector2((p.x + 1) * 0.5 * w, (-p.y + 1) * 0.5 * h);
   }
 
+  function isSolvedStickers() {
+    for (let f = 0; f < 6; f++) {
+      const c = stickers[f][0];
+      for (let i = 1; i < 9; i++) if (stickers[f][i] !== c) return false;
+    }
+    return true;
+  }
+
+  function runCelebrationPulse() {
+    const pulseMs = 1200;
+    const start = performance.now();
+    cubies.forEach(mesh => {
+      mesh.userData.mats.forEach(m => {
+        if (m.color.getHex() !== COL.X) m.emissive.setHex(0x66ccff);
+      });
+    });
+    function tick(now) {
+      const t = Math.min(1, (now - start) / pulseMs);
+      const e = 0.4 * (1 - t);
+      cubies.forEach(mesh => {
+        mesh.userData.mats.forEach(m => {
+          if (m.color.getHex() !== COL.X) m.emissiveIntensity = e;
+        });
+      });
+      if (t < 1) requestAnimationFrame(tick);
+      else {
+        cubies.forEach(mesh => {
+          mesh.userData.mats.forEach(m => {
+            m.emissive.setHex(0);
+            m.emissiveIntensity = 0;
+          });
+        });
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function showSolvedOverlay() {
+    const ov = document.getElementById('solved-overlay');
+    document.getElementById('solved-move-display').textContent = String(moveCount);
+    ov.classList.add('visible');
+    ov.setAttribute('aria-hidden', 'false');
+    setTimeout(() => {
+      ov.classList.remove('visible');
+      ov.setAttribute('aria-hidden', 'true');
+    }, 4000);
+  }
+
   function faceLetterFromNormal(n) {
     if (Math.abs(n.y) >= Math.abs(n.x) && Math.abs(n.y) >= Math.abs(n.z)) return n.y > 0 ? 'U' : 'D';
     if (Math.abs(n.z) >= Math.abs(n.x)) return n.z > 0 ? 'F' : 'B';
@@ -534,6 +622,12 @@
         });
         pivot.quaternion.set(0, 0, 0, 1);
         applyMoveToStickers(move);
+        if (!isSolvedStickers()) wasEverUnsolved = true;
+        else if (wasEverUnsolved) {
+          wasEverUnsolved = false;
+          runCelebrationPulse();
+          showSolvedOverlay();
+        }
         onDone();
       }
     }
@@ -880,6 +974,8 @@
     document.getElementById('solve-panel').classList.remove('open');
     document.getElementById('btn-watch').disabled = true;
     document.getElementById('watch-bar').classList.remove('active');
+    wasEverUnsolved = false;
+    document.getElementById('solved-overlay').classList.remove('visible');
   }
 
   let watchPlaying = false;
