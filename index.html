@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rubik's Cube — Charlie</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      background: #0d0d0f;
+      font-family: 'JetBrains Mono', monospace;
+      color: #e8e8ec;
+    }
+    #wrap {
+      opacity: 0;
+      transition: opacity 0.8s ease-out;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+    #wrap.ready { opacity: 1; }
+    #canvas-host {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+    }
+    canvas { display: block; width: 100% !important; height: 100% !important; }
+    #hud {
+      flex-shrink: 0;
+      padding: 12px 16px 20px;
+      background: linear-gradient(180deg, transparent 0%, rgba(13,13,15,0.95) 30%);
+      border-top: 1px solid rgba(255,255,255,0.06);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 10px 18px;
+      border: 1px solid rgba(0, 180, 216, 0.45);
+      background: rgba(0, 40, 60, 0.4);
+      color: #7df9ff;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: background 0.2s, box-shadow 0.2s, border-color 0.2s;
+    }
+    .btn:hover {
+      background: rgba(0, 80, 100, 0.5);
+      box-shadow: 0 0 20px rgba(0, 200, 255, 0.15);
+      border-color: rgba(0, 220, 255, 0.6);
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn.secondary { border-color: rgba(180, 140, 255, 0.4); color: #d4b8ff; }
+    .stat {
+      font-size: 13px;
+      color: #889;
+      margin: 0 8px;
+    }
+    .stat strong { color: #0f8; font-weight: 600; }
+    #scramble-panel, #solve-panel {
+      width: 100%;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 0 16px 12px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #9aa;
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.35s ease, padding 0.35s ease;
+    }
+    #scramble-panel.open, #solve-panel.open {
+      max-height: 120px;
+      padding-bottom: 12px;
+    }
+    #scramble-panel code, #solve-panel code {
+      display: block;
+      margin-top: 6px;
+      padding: 10px 12px;
+      background: rgba(0,0,0,0.45);
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.08);
+      word-break: break-all;
+      color: #b8e0ff;
+    }
+    #legend-toggle {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 10;
+    }
+    #legend {
+      position: fixed;
+      top: 48px;
+      right: 12px;
+      z-index: 10;
+      max-width: 280px;
+      background: rgba(10,12,18,0.92);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      padding: 14px 16px;
+      font-size: 11px;
+      line-height: 1.65;
+      color: #aab;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      max-height: 0;
+      overflow: hidden;
+      opacity: 0;
+      transition: max-height 0.4s ease, opacity 0.3s ease, padding 0.3s ease;
+    }
+    #legend.open {
+      max-height: 320px;
+      opacity: 1;
+      padding: 14px 16px;
+    }
+    #legend h3 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      color: #7df9ff;
+      margin-bottom: 10px;
+    }
+    #legend kbd {
+      display: inline-block;
+      padding: 2px 6px;
+      background: #222;
+      border-radius: 3px;
+      border: 1px solid #444;
+      margin-right: 4px;
+    }
+    #watch-bar {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      justify-content: center;
+      padding: 8px 0 0;
+    }
+    #watch-bar.active { display: flex; }
+    .glow-ring {
+      position: absolute;
+      inset: 15%;
+      border-radius: 50%;
+      background: radial-gradient(ellipse at center, rgba(0, 100, 140, 0.12) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    #title {
+      position: fixed;
+      top: 12px;
+      left: 16px;
+      z-index: 5;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 14px;
+      letter-spacing: 0.2em;
+      color: rgba(255,255,255,0.35);
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="title">RUBIK</div>
+  <button type="button" class="btn secondary" id="legend-toggle" aria-expanded="false">Shortcuts</button>
+  <div id="legend" aria-hidden="true">
+    <h3>KEYBOARD</h3>
+    <div><kbd>U</kbd><kbd>D</kbd><kbd>R</kbd><kbd>L</kbd><kbd>F</kbd><kbd>B</kbd> face CW</div>
+    <div><kbd>Shift</kbd> + same → CCW</div>
+    <div><kbd>M</kbd> <kbd>E</kbd> <kbd>S</kbd> slices (+ Shift)</div>
+    <div style="margin-top:8px">Right-drag orbit · Wheel zoom</div>
+    <div>Drag on face to turn</div>
+  </div>
+  <div id="wrap">
+    <div id="canvas-host">
+      <div class="glow-ring"></div>
+    </div>
+    <div id="scramble-panel"><span>Scramble:</span><code id="scramble-text"></code></div>
+    <div id="solve-panel"><span id="solve-label">Solution:</span><code id="solve-text"></code></div>
+    <div id="hud">
+      <span class="stat">Moves: <strong id="move-count">0</strong></span>
+      <button type="button" class="btn" id="btn-scramble">Scramble</button>
+      <button type="button" class="btn secondary" id="btn-show-scramble">Show Scramble</button>
+      <button type="button" class="btn secondary" id="btn-show-solve">Show Solve</button>
+      <button type="button" class="btn" id="btn-watch" disabled>Watch Solve</button>
+      <button type="button" class="btn secondary" id="btn-reset">Reset</button>
+    </div>
+    <div id="watch-bar">
+      <span class="stat">Playback: <strong id="playback-step">0</strong> / <strong id="playback-total">0</strong></span>
+      <button type="button" class="btn" id="btn-watch-pause">Pause</button>
+    </div>
+  </div>
+
+  <!-- Three r128: jsDelivr (hromp.com CSP allows jsdelivr; cdnjs is blocked sitewide) -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <script>
+(function () {
+  'use strict';
+
+  const COL = {
+    W: 0xffffff, Y: 0xffd500, R: 0xc41e3a, O: 0xff5800,
+    B: 0x0051ba, G: 0x009b48, X: 0x0a0a0c
+  };
+  const GAP = 0.07;
+  const CS = (3 - 2 * GAP) / 3;
+  const SP = 1;
+
+  let scene, camera, renderer, controls, raycaster, pointer;
+  let cubies = [];
+  let pivot;
+  let moveQueue = [];
+  let animating = false;
+  let moveCount = 0;
+  let scrambleMoves = [];
+  let lastScrambleNotation = '';
+  let userMoveDuringSession = false;
+
+  const faceNames = ['U', 'D', 'F', 'B', 'R', 'L'];
+  let stickers = [];
+
+  function initStickers() {
+    stickers = [
+      Array(9).fill('W'), Array(9).fill('Y'),
+      Array(9).fill('G'), Array(9).fill('B'),
+      Array(9).fill('R'), Array(9).fill('O')
+    ];
+  }
+  initStickers();
+
+  function cloneStickers() {
+    return stickers.map(f => f.slice());
+  }
+
+  function rotateFaceArr(arr, cw) {
+    const a = arr.slice();
+    if (cw) {
+      return [a[6], a[3], a[0], a[7], a[4], a[1], a[8], a[5], a[2]];
+    }
+    return [a[2], a[5], a[8], a[1], a[4], a[7], a[0], a[3], a[6]];
+  }
+
+  function applyMoveToStickers(move) {
+    const U = stickers[0], D = stickers[1], F = stickers[2], B = stickers[3], R = stickers[4], L = stickers[5];
+    const cw = !move.prime;
+    const double = move.double;
+    const times = double ? 2 : 1;
+    for (let t = 0; t < times; t++) {
+      switch (move.face) {
+        case 'U': {
+          if (cw) {
+            stickers[0] = rotateFaceArr(U, true);
+            const f = F.slice(0, 3), r = R.slice(0, 3), b = B.slice(0, 3), l = L.slice(0, 3);
+            for (let i = 0; i < 3; i++) { F[i] = l[i]; R[i] = f[i]; B[i] = r[i]; L[i] = b[i]; }
+          } else {
+            stickers[0] = rotateFaceArr(U, false);
+            const f = F.slice(0, 3), r = R.slice(0, 3), b = B.slice(0, 3), l = L.slice(0, 3);
+            for (let i = 0; i < 3; i++) { F[i] = r[i]; R[i] = b[i]; B[i] = l[i]; L[i] = f[i]; }
+          }
+          break;
+        }
+        case 'D': {
+          if (cw) {
+            stickers[1] = rotateFaceArr(D, true);
+            const f = F.slice(6, 9), r = R.slice(6, 9), b = B.slice(6, 9), l = L.slice(6, 9);
+            for (let i = 0; i < 3; i++) { F[6 + i] = l[i]; R[6 + i] = f[i]; B[6 + i] = r[i]; L[6 + i] = b[i]; }
+          } else {
+            stickers[1] = rotateFaceArr(D, false);
+            const f = F.slice(6, 9), r = R.slice(6, 9), b = B.slice(6, 9), l = L.slice(6, 9);
+            for (let i = 0; i < 3; i++) { F[6 + i] = r[i]; R[6 + i] = b[i]; B[6 + i] = l[i]; L[6 + i] = f[i]; }
+          }
+          break;
+        }
+        case 'F': {
+          if (cw) {
+            stickers[2] = rotateFaceArr(F, true);
+            const u = [U[6], U[7], U[8]], rr = [R[0], R[3], R[6]], dd = [D[2], D[1], D[0]], ll = [L[8], L[5], L[2]];
+            [R[0], R[3], R[6]] = u;
+            [D[2], D[1], D[0]] = rr;
+            [L[8], L[5], L[2]] = dd;
+            [U[6], U[7], U[8]] = ll;
+          } else {
+            stickers[2] = rotateFaceArr(F, false);
+            const u = [U[6], U[7], U[8]], rr = [R[0], R[3], R[6]], dd = [D[2], D[1], D[0]], ll = [L[8], L[5], L[2]];
+            [R[0], R[3], R[6]] = dd;
+            [D[2], D[1], D[0]] = ll;
+            [L[8], L[5], L[2]] = u;
+            [U[6], U[7], U[8]] = rr;
+          }
+          break;
+        }
+        case 'B': {
+          if (cw) {
+            stickers[3] = rotateFaceArr(B, true);
+            const u = [U[0], U[1], U[2]], rr = [R[2], R[5], R[8]], dd = [D[8], D[7], D[6]], ll = [L[0], L[3], L[6]];
+            [R[2], R[5], R[8]] = u;
+            [D[8], D[7], D[6]] = rr;
+            [L[0], L[3], L[6]] = dd;
+            [U[0], U[1], U[2]] = ll;
+          } else {
+            stickers[3] = rotateFaceArr(B, false);
+            const u = [U[0], U[1], U[2]], rr = [R[2], R[5], R[8]], dd = [D[8], D[7], D[6]], ll = [L[0], L[3], L[6]];
+            [R[2], R[5], R[8]] = dd;
+            [D[8], D[7], D[6]] = ll;
+            [L[0], L[3], L[6]] = u;
+            [U[0], U[1], U[2]] = rr;
+          }
+          break;
+        }
+        case 'R': {
+          if (cw) {
+            stickers[4] = rotateFaceArr(R, true);
+            const u = [U[2], U[5], U[8]], ff = [F[2], F[5], F[8]], dd = [D[2], D[5], D[8]], bb = [B[6], B[3], B[0]];
+            [F[2], F[5], F[8]] = u;
+            [D[2], D[5], D[8]] = ff;
+            [B[6], B[3], B[0]] = dd;
+            [U[2], U[5], U[8]] = bb;
+          } else {
+            stickers[4] = rotateFaceArr(R, false);
+            const u = [U[2], U[5], U[8]], ff = [F[2], F[5], F[8]], dd = [D[2], D[5], D[8]], bb = [B[6], B[3], B[0]];
+            [F[2], F[5], F[8]] = dd;
+            [D[2], D[5], D[8]] = bb;
+            [B[6], B[3], B[0]] = u;
+            [U[2], U[5], U[8]] = ff;
+          }
+          break;
+        }
+        case 'L': {
+          if (cw) {
+            stickers[5] = rotateFaceArr(L, true);
+            const u = [U[0], U[3], U[6]], ff = [F[0], F[3], F[6]], dd = [D[0], D[3], D[6]], bb = [B[8], B[5], B[2]];
+            [U[0], U[3], U[6]] = bb;
+            [F[0], F[3], F[6]] = u;
+            [D[0], D[3], D[6]] = ff;
+            [B[8], B[5], B[2]] = dd;
+          } else {
+            stickers[5] = rotateFaceArr(L, false);
+            const u = [U[0], U[3], U[6]], ff = [F[0], F[3], F[6]], dd = [D[0], D[3], D[6]], bb = [B[8], B[5], B[2]];
+            [U[0], U[3], U[6]] = ff;
+            [F[0], F[3], F[6]] = dd;
+            [D[0], D[3], D[6]] = bb;
+            [B[8], B[5], B[2]] = u;
+          }
+          break;
+        }
+        case 'M': {
+          const ou = [U[1], U[4], U[7]], of = [F[1], F[4], F[7]], od = [D[1], D[4], D[7]], ob = [B[7], B[4], B[1]];
+          if (cw) {
+            [U[1], U[4], U[7]] = of.slice();
+            [F[1], F[4], F[7]] = od.slice();
+            [D[1], D[4], D[7]] = ob.slice();
+            [B[7], B[4], B[1]] = [ou[2], ou[1], ou[0]];
+          } else {
+            [F[1], F[4], F[7]] = ou.slice();
+            [D[1], D[4], D[7]] = of.slice();
+            [B[7], B[4], B[1]] = [od[2], od[1], od[0]];
+            [U[1], U[4], U[7]] = [ob[2], ob[1], ob[0]];
+          }
+          break;
+        }
+        case 'E': {
+          if (cw) {
+            const f = F.slice(3, 6), r = R.slice(3, 6), b = B.slice(3, 6), l = L.slice(3, 6);
+            for (let i = 0; i < 3; i++) { F[3 + i] = l[i]; R[3 + i] = f[i]; B[3 + i] = r[i]; L[3 + i] = b[i]; }
+          } else {
+            const f = F.slice(3, 6), r = R.slice(3, 6), b = B.slice(3, 6), l = L.slice(3, 6);
+            for (let i = 0; i < 3; i++) { F[3 + i] = r[i]; R[3 + i] = b[i]; B[3 + i] = l[i]; L[3 + i] = f[i]; }
+          }
+          break;
+        }
+        case 'S': {
+          if (cw) {
+            const u = [U[3], U[4], U[5]], rr = [R[1], R[4], R[7]], dd = [D[3], D[4], D[5]], ll = [L[1], L[4], L[7]];
+            [R[1], R[4], R[7]] = u.slice();
+            [D[3], D[4], D[5]] = rr.slice();
+            [L[1], L[4], L[7]] = dd.slice();
+            [U[3], U[4], U[5]] = ll.slice();
+          } else {
+            const u = [U[3], U[4], U[5]], rr = [R[1], R[4], R[7]], dd = [D[3], D[4], D[5]], ll = [L[1], L[4], L[7]];
+            [R[1], R[4], R[7]] = dd.slice();
+            [D[3], D[4], D[5]] = ll.slice();
+            [L[1], L[4], L[7]] = u.slice();
+            [U[3], U[4], U[5]] = rr.slice();
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  function parseMoveKey(face, shift) {
+    return { face, prime: shift, double: false };
+  }
+
+  function moveToNotation(m) {
+    let s = m.face;
+    if (m.double) s += '2';
+    else if (m.prime) s += "'";
+    return s;
+  }
+
+  function invertMove(m) {
+    if (m.double) return { face: m.face, prime: false, double: true };
+    return { face: m.face, prime: !m.prime, double: false };
+  }
+
+  function getSliceCubies(face) {
+    const eps = 0.2;
+    return cubies.filter(c => {
+      const { ix, iy, iz } = c.userData;
+      switch (face) {
+        case 'U': return Math.abs(iy - 1) < eps;
+        case 'D': return Math.abs(iy + 1) < eps;
+        case 'F': return Math.abs(iz - 1) < eps;
+        case 'B': return Math.abs(iz + 1) < eps;
+        case 'R': return Math.abs(ix - 1) < eps;
+        case 'L': return Math.abs(ix + 1) < eps;
+        case 'M': return Math.abs(ix) < eps;
+        case 'E': return Math.abs(iy) < eps;
+        case 'S': return Math.abs(iz) < eps;
+        default: return false;
+      }
+    });
+  }
+
+  function getAxisAngle(move) {
+    const cw = !move.prime;
+    const k = (cw ? 1 : -1) * (move.double ? 2 : 1);
+    const h = Math.PI / 2;
+    const ax = new THREE.Vector3();
+    let sign = 1;
+    switch (move.face) {
+      case 'U': case 'D': case 'E': ax.set(0, 1, 0); sign = 1; break;
+      case 'R': ax.set(1, 0, 0); sign = 1; break;
+      case 'L': case 'M': ax.set(1, 0, 0); sign = -1; break;
+      case 'F': case 'S': ax.set(0, 0, 1); sign = 1; break;
+      case 'B': ax.set(0, 0, 1); sign = -1; break;
+      default: ax.set(0, 1, 0);
+    }
+    return { axis: ax, angle: k * h * sign };
+  }
+
+  function snapCubieGrid(c) {
+    c.userData.ix = Math.round(c.position.x / SP);
+    c.userData.iy = Math.round(c.position.y / SP);
+    c.userData.iz = Math.round(c.position.z / SP);
+    c.userData.ix = Math.max(-1, Math.min(1, c.userData.ix));
+    c.userData.iy = Math.max(-1, Math.min(1, c.userData.iy));
+    c.userData.iz = Math.max(-1, Math.min(1, c.userData.iz));
+  }
+
+  function animateSlice(move, duration, onDone) {
+    const list = getSliceCubies(move.face);
+    if (!list.length) { onDone(); return; }
+    const { axis, angle } = getAxisAngle(move);
+    pivot.quaternion.set(0, 0, 0, 1);
+    list.forEach(mesh => pivot.attach(mesh));
+    const start = performance.now();
+    const ease = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    const ax = axis.clone().normalize();
+
+    function tick(now) {
+      const t = Math.min(1, (now - start) / duration);
+      const e = ease(t);
+      pivot.quaternion.setFromAxisAngle(ax, angle * e);
+      if (t < 1) {
+        requestAnimationFrame(tick);
+      } else {
+        pivot.quaternion.setFromAxisAngle(ax, angle);
+        list.forEach(mesh => {
+          scene.attach(mesh);
+          snapCubieGrid(mesh);
+        });
+        pivot.quaternion.set(0, 0, 0, 1);
+        applyMoveToStickers(move);
+        onDone();
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function enqueue(move, duration, countMove) {
+    return new Promise(res => {
+      moveQueue.push({ move, duration, countMove, res });
+      pumpQueue();
+    });
+  }
+
+  function pumpQueue() {
+    if (animating || !moveQueue.length) return;
+    animating = true;
+    const { move, duration, countMove, res } = moveQueue.shift();
+    animateSlice(move, duration, () => {
+      if (countMove) {
+        moveCount++;
+        document.getElementById('move-count').textContent = moveCount;
+      }
+      animating = false;
+      res();
+      pumpQueue();
+    });
+  }
+
+  function buildCubie(ix, iy, iz) {
+    const mats = [];
+    const faces = [
+      { dir: new THREE.Vector3(1, 0, 0), col: ix === 1 ? 'R' : 'X' },
+      { dir: new THREE.Vector3(-1, 0, 0), col: ix === -1 ? 'O' : 'X' },
+      { dir: new THREE.Vector3(0, 1, 0), col: iy === 1 ? 'W' : 'X' },
+      { dir: new THREE.Vector3(0, -1, 0), col: iy === -1 ? 'Y' : 'X' },
+      { dir: new THREE.Vector3(0, 0, 1), col: iz === 1 ? 'G' : 'X' },
+      { dir: new THREE.Vector3(0, 0, -1), col: iz === -1 ? 'B' : 'X' }
+    ];
+    faces.forEach(f => {
+      const mat = new THREE.MeshStandardMaterial({
+        color: COL[f.col],
+        metalness: 0.15,
+        roughness: 0.45,
+        emissive: 0x000000,
+        emissiveIntensity: 0
+      });
+      mats.push(mat);
+    });
+    const geo = new THREE.BoxGeometry(CS * 0.98, CS * 0.98, CS * 0.98);
+    const mesh = new THREE.Mesh(geo, mats);
+    mesh.position.set(ix * SP, iy * SP, iz * SP);
+    mesh.userData = { ix, iy, iz, mats };
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    return mesh;
+  }
+
+  function init() {
+    const host = document.getElementById('canvas-host');
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0d0d0f);
+
+    camera = new THREE.PerspectiveCamera(45, host.clientWidth / host.clientHeight, 0.1, 100);
+    camera.position.set(4.2, 3.5, 5.2);
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(host.clientWidth, host.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    host.appendChild(renderer.domElement);
+
+    const OC = THREE.OrbitControls || window.OrbitControls;
+    controls = new OC(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.target.set(0, 0, 0);
+    controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
+    controls.mouseButtons.RIGHT = THREE.MOUSE.PAN;
+    controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
+    controls.touches.ONE = THREE.TOUCH.ROTATE;
+    controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
+
+    const amb = new THREE.AmbientLight(0x404060, 0.6);
+    scene.add(amb);
+    const key = new THREE.DirectionalLight(0xffffff, 0.85);
+    key.position.set(4, 8, 6);
+    key.castShadow = true;
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0x4488ff, 0.25);
+    fill.position.set(-5, 2, -4);
+    scene.add(fill);
+    const rim = new THREE.PointLight(0x00aacc, 0.4, 20);
+    rim.position.set(0, -2, 3);
+    scene.add(rim);
+
+    pivot = new THREE.Object3D();
+    scene.add(pivot);
+
+    cubies = [];
+    for (let ix = -1; ix <= 1; ix++)
+      for (let iy = -1; iy <= 1; iy++)
+        for (let iz = -1; iz <= 1; iz++) {
+          const m = buildCubie(ix, iy, iz);
+          scene.add(m);
+          cubies.push(m);
+        }
+
+    raycaster = new THREE.Raycaster();
+    pointer = new THREE.Vector2();
+
+    window.addEventListener('resize', onResize);
+    window.addEventListener('keydown', onKeyDown);
+
+    let drag = null;
+    renderer.domElement.addEventListener('pointerdown', e => {
+      if (e.button !== 0) return;
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+      const hits = raycaster.intersectObjects(cubies, false);
+      if (!hits.length) return;
+      const hit = hits[0];
+      const faceIdx = Math.floor(hit.faceIndex / 2);
+      const normals = [new THREE.Vector3(1,0,0), new THREE.Vector3(-1,0,0), new THREE.Vector3(0,1,0), new THREE.Vector3(0,-1,0), new THREE.Vector3(0,0,1), new THREE.Vector3(0,0,-1)];
+      const worldN = normals[faceIdx].clone().transformDirection(hit.object.matrixWorld);
+      drag = {
+        x: e.clientX, y: e.clientY,
+        cubie: hit.object,
+        normal: worldN.normalize(),
+        hitPoint: hit.point.clone(),
+        ix: hit.object.userData.ix, iy: hit.object.userData.iy, iz: hit.object.userData.iz
+      };
+      controls.enabled = false;
+    });
+
+    renderer.domElement.addEventListener('pointermove', e => {
+      if (!drag) return;
+    });
+
+    renderer.domElement.addEventListener('pointerup', e => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x;
+      const dy = e.clientY - drag.y;
+      const dist = Math.hypot(dx, dy);
+      controls.enabled = true;
+      if (dist < 20) { drag = null; return; }
+
+      const v = new THREE.Vector3();
+      camera.getWorldDirection(v);
+      const right = new THREE.Vector3().crossVectors(v, new THREE.Vector3(0, 1, 0));
+      if (right.lengthSq() < 0.01) right.set(1, 0, 0);
+      right.normalize();
+      const up = new THREE.Vector3().crossVectors(right, v).normalize();
+      const dragW = right.clone().multiplyScalar(dx).add(up.clone().multiplyScalar(-dy)).normalize();
+
+      const n = drag.normal;
+      let face;
+      if (Math.abs(n.y) >= Math.abs(n.x) && Math.abs(n.y) >= Math.abs(n.z))
+        face = n.y > 0 ? 'U' : 'D';
+      else if (Math.abs(n.z) >= Math.abs(n.x))
+        face = n.z > 0 ? 'F' : 'B';
+      else
+        face = n.x > 0 ? 'R' : 'L';
+
+      const ax = new THREE.Vector3();
+      if (face === 'U' || face === 'D') ax.set(0, 1, 0);
+      else if (face === 'R' || face === 'L') ax.set(1, 0, 0);
+      else ax.set(0, 0, 1);
+
+      const fromC = drag.hitPoint.clone().sub(drag.cubie.position);
+      const t1 = new THREE.Vector3().crossVectors(ax, fromC);
+      if (t1.lengthSq() < 1e-6) t1.crossVectors(ax, new THREE.Vector3(0, 1, 0));
+      t1.normalize();
+      const t2 = new THREE.Vector3().crossVectors(ax, t1).normalize();
+      const prime = dragW.dot(t2) < 0;
+      const move = { face, prime, double: false };
+      if (face === 'D' || face === 'B' || face === 'L') move.prime = !move.prime;
+
+      userMoveDuringSession = true;
+      enqueue(move, 300, true);
+      drag = null;
+    });
+
+    renderer.domElement.addEventListener('pointerleave', () => {
+      if (drag) { controls.enabled = true; drag = null; }
+    });
+
+    let hovered = null;
+    renderer.domElement.addEventListener('mousemove', e => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+      const hits = raycaster.intersectObjects(cubies, false);
+      if (hovered) {
+        hovered.userData.mats.forEach(m => { m.emissive.setHex(0); m.emissiveIntensity = 0; });
+        hovered = null;
+      }
+      if (hits.length && !drag) {
+        hovered = hits[0].object;
+        hovered.userData.mats.forEach(m => {
+          if (m.color.getHex() !== COL.X) {
+            m.emissive.setHex(0x224466);
+            m.emissiveIntensity = 0.25;
+          }
+        });
+      }
+    });
+
+    onResize();
+    animate();
+    document.getElementById('wrap').classList.add('ready');
+  }
+
+  function onResize() {
+    const host = document.getElementById('canvas-host');
+    camera.aspect = host.clientWidth / host.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(host.clientWidth, host.clientHeight);
+  }
+
+  function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+  }
+
+  const keyMap = { KeyU: 'U', KeyD: 'D', KeyR: 'R', KeyL: 'L', KeyF: 'F', KeyB: 'B', KeyM: 'M', KeyE: 'E', KeyS: 'S' };
+
+  function onKeyDown(e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    const face = keyMap[e.code];
+    if (!face) return;
+    e.preventDefault();
+    userMoveDuringSession = true;
+    enqueue(parseMoveKey(face, e.shiftKey), 300, true);
+  }
+
+  function randomMove() {
+    const faces = ['U', 'D', 'R', 'L', 'F', 'B'];
+    const f = faces[Math.floor(Math.random() * faces.length)];
+    const r = Math.random();
+    if (r < 0.33) return { face: f, prime: false, double: false };
+    if (r < 0.66) return { face: f, prime: true, double: false };
+    return { face: f, prime: false, double: true };
+  }
+
+  async function runScramble() {
+    document.getElementById('btn-scramble').disabled = true;
+    scrambleMoves = [];
+    for (let i = 0; i < 20; i++) {
+      let m;
+      do { m = randomMove(); } while (scrambleMoves.length && scrambleMoves[scrambleMoves.length - 1].face === m.face);
+      scrambleMoves.push(m);
+    }
+    lastScrambleNotation = scrambleMoves.map(moveToNotation).join(' ');
+    userMoveDuringSession = false;
+    moveCount = 0;
+    document.getElementById('move-count').textContent = '0';
+    for (const m of scrambleMoves) {
+      await enqueue(m, 80, false);
+    }
+    document.getElementById('btn-scramble').disabled = false;
+    document.getElementById('btn-watch').disabled = false;
+    document.getElementById('solve-label').innerHTML = 'Reverse solution <span style="opacity:0.7">(inverse scramble)</span>:';
+  }
+
+  function resetCube() {
+    moveQueue = [];
+    animating = false;
+    cubies.forEach(c => scene.remove(c));
+    cubies = [];
+    for (let ix = -1; ix <= 1; ix++)
+      for (let iy = -1; iy <= 1; iy++)
+        for (let iz = -1; iz <= 1; iz++) {
+          const m = buildCubie(ix, iy, iz);
+          scene.add(m);
+          cubies.push(m);
+        }
+    initStickers();
+    scrambleMoves = [];
+    lastScrambleNotation = '';
+    moveCount = 0;
+    document.getElementById('move-count').textContent = '0';
+    document.getElementById('scramble-text').textContent = '';
+    document.getElementById('solve-text').textContent = '';
+    document.getElementById('scramble-panel').classList.remove('open');
+    document.getElementById('solve-panel').classList.remove('open');
+    document.getElementById('btn-watch').disabled = true;
+    document.getElementById('watch-bar').classList.remove('active');
+  }
+
+  let watchPlaying = false;
+  let watchPaused = false;
+  let watchMoves = [];
+
+  async function watchSolve() {
+    if (!scrambleMoves.length) return;
+    watchMoves = scrambleMoves.slice().reverse().map(invertMove);
+    document.getElementById('watch-bar').classList.add('active');
+    document.getElementById('playback-total').textContent = watchMoves.length;
+    document.getElementById('btn-watch-pause').textContent = 'Pause';
+    watchPlaying = true;
+    watchPaused = false;
+    for (let i = 0; i < watchMoves.length; i++) {
+      while (watchPaused) await new Promise(r => setTimeout(r, 80));
+      document.getElementById('playback-step').textContent = String(i + 1);
+      await enqueue(watchMoves[i], 300, true);
+    }
+    document.getElementById('watch-bar').classList.remove('active');
+    watchPlaying = false;
+  }
+
+  document.getElementById('btn-scramble').addEventListener('click', runScramble);
+  document.getElementById('btn-show-scramble').addEventListener('click', () => {
+    const el = document.getElementById('scramble-panel');
+    const t = document.getElementById('scramble-text');
+    t.textContent = lastScrambleNotation || '(scramble first)';
+    el.classList.toggle('open');
+  });
+  document.getElementById('btn-show-solve').addEventListener('click', () => {
+    if (!scrambleMoves.length) {
+      document.getElementById('solve-text').textContent = '(scramble first)';
+      document.getElementById('solve-panel').classList.add('open');
+      return;
+    }
+    const inv = scrambleMoves.slice().reverse().map(invertMove).map(moveToNotation).join(' ');
+    document.getElementById('solve-text').textContent = inv;
+    document.getElementById('solve-panel').classList.add('open');
+    document.getElementById('solve-label').innerHTML = 'Reverse solution <span style="opacity:0.7">(inverse scramble)</span>:';
+  });
+  document.getElementById('btn-watch').addEventListener('click', () => { if (!watchPlaying) watchSolve(); });
+  document.getElementById('btn-watch-pause').addEventListener('click', () => { watchPaused = !watchPaused; document.getElementById('btn-watch-pause').textContent = watchPaused ? 'Resume' : 'Pause'; });
+  document.getElementById('btn-reset').addEventListener('click', resetCube);
+  document.getElementById('legend-toggle').addEventListener('click', () => {
+    const l = document.getElementById('legend');
+    const open = l.classList.toggle('open');
+    document.getElementById('legend-toggle').setAttribute('aria-expanded', open);
+  });
+
+  init();
+})();
+  </script>
+</body>
+</html>
