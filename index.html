@@ -272,6 +272,7 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/cubejs@1.3.2/lib/cube.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/cubejs@1.3.2/lib/solve.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cubejs@1.3.2/lib/async.js"></script>
 
   <script>
 (function () {
@@ -509,27 +510,70 @@
     }).filter(Boolean);
   }
 
-  function runKociembaSolveAsync() {
-    return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        try {
-          if (typeof Cube === 'undefined') {
-            reject(new Error('Cube solver not loaded'));
-            return;
-          }
-          if (isSolvedStickers()) {
-            resolve({ solved: true, sol: '', moves: [] });
-            return;
-          }
-          const facelets = getSolverFacelets();
-          const cube = Cube.fromString(facelets);
-          const sol = cube.solve();
-          resolve({ solved: false, sol: sol || '', moves: parseKociembaSolutionString(sol) });
-        } catch (e) {
-          reject(e);
-        }
-      }, 0);
+  const CUBE_WORKER_URL = 'https://cdn.jsdelivr.net/npm/cubejs@1.3.2/lib/worker.js';
+  let cubeWorkerReadyPromise = null;
+
+  /** cube.solve() is synchronous and can freeze the tab for seconds; cubejs runs it in a Worker instead. */
+  function ensureCubeWorkerReady() {
+    if (typeof Cube === 'undefined') return Promise.reject(new Error('Cube solver not loaded'));
+    if (!Cube.asyncOK) {
+      return Promise.reject(new Error('Web Workers are not available; the solver cannot run without blocking this page.'));
+    }
+    if (cubeWorkerReadyPromise) return cubeWorkerReadyPromise;
+    const p = new Promise((resolve, reject) => {
+      const to = setTimeout(() => reject(new Error('Solver worker failed to initialize (timeout)')), 20000);
+      try {
+        Cube.asyncInit(CUBE_WORKER_URL, function () {
+          clearTimeout(to);
+          resolve();
+        });
+      } catch (e) {
+        clearTimeout(to);
+        reject(e);
+      }
     });
+    p.catch(function () { cubeWorkerReadyPromise = null; });
+    cubeWorkerReadyPromise = p;
+    return cubeWorkerReadyPromise;
+  }
+
+  function runKociembaSolveAsync() {
+    if (isSolvedStickers()) {
+      return Promise.resolve({ solved: true, sol: '', moves: [] });
+    }
+    return ensureCubeWorkerReady().then(() => new Promise((resolve, reject) => {
+      let facelets;
+      try {
+        facelets = getSolverFacelets();
+      } catch (e) {
+        reject(e);
+        return;
+      }
+      let cube;
+      try {
+        cube = Cube.fromString(facelets);
+      } catch (e) {
+        reject(new Error('Invalid cube state for solver: ' + e.message));
+        return;
+      }
+      const to = setTimeout(() => {
+        reject(new Error('Solve timed out (30s). Try Reset and scramble again.'));
+      }, 30000);
+      try {
+        cube.asyncSolve(function (algorithm) {
+          clearTimeout(to);
+          try {
+            const sol = algorithm == null ? '' : String(algorithm);
+            resolve({ solved: false, sol, moves: parseKociembaSolutionString(sol) });
+          } catch (e) {
+            reject(e);
+          }
+        });
+      } catch (e) {
+        clearTimeout(to);
+        reject(e);
+      }
+    }));
   }
 
   function updateWatchButton() {
@@ -969,6 +1013,9 @@
     animate();
     updateWatchButton();
     selfTestSliceCycles();
+    ensureCubeWorkerReady().catch(function () {
+      console.warn('charlie-rubiks: Kociemba worker not ready yet (will retry on Show/Watch Solve)');
+    });
     document.getElementById('wrap').classList.add('ready');
   }
 
