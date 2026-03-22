@@ -5,6 +5,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] - 2026-03-22
+
+### Changed
+
+- Vendor cubejs `lib/` (`cube.js`, `solve.js`, `async.js`, `worker.js`) under `/charlie/lib/` and load from same origin so Firefox allows the solver worker (cross-origin `Worker` from jsDelivr was blocked).
+
 ## [0.4.2] - 2026-03-22
 
 ### Changed
