@@ -28,8 +28,19 @@
       flex: 1;
       min-height: 0;
       position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
-    canvas { display: block; width: 100% !important; height: 100% !important; touch-action: none; }
+    /* Square GL viewport so the cube stays undistorted when panels shrink the flex area (non-square host). */
+    #canvas-view {
+      position: relative;
+      flex-shrink: 0;
+    }
+    #canvas-view canvas {
+      display: block;
+      touch-action: none;
+    }
     #hud {
       flex-shrink: 0;
       padding: 12px 16px 20px;
@@ -67,21 +78,52 @@
       margin: 0 8px;
     }
     .stat strong { color: #0f8; font-weight: 600; }
+    .hud-topface {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 4px;
+    }
+    .hud-topface label {
+      font-size: 11px;
+      color: #889;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+    }
+    .hud-topface select {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      padding: 8px 10px;
+      border-radius: 4px;
+      border: 1px solid rgba(0, 180, 216, 0.35);
+      background: rgba(0, 40, 60, 0.55);
+      color: #9dd;
+      cursor: pointer;
+      max-width: 11em;
+    }
+    .hud-topface select:focus {
+      outline: none;
+      border-color: rgba(0, 220, 255, 0.55);
+    }
     #scramble-panel, #solve-panel {
       width: 100%;
       max-width: 720px;
       margin: 0 auto;
-      padding: 0 16px 12px;
+      padding: 0;
       font-size: 12px;
       line-height: 1.5;
       color: #9aa;
       max-height: 0;
+      min-height: 0;
       overflow: hidden;
+      box-sizing: border-box;
       transition: max-height 0.35s ease, padding 0.35s ease;
     }
     #scramble-panel.open, #solve-panel.open {
       max-height: 120px;
-      padding-bottom: 12px;
+      padding: 0 16px 12px;
     }
     #scramble-panel code, #solve-panel code {
       display: block;
@@ -108,7 +150,7 @@
       background: rgba(10,12,18,0.92);
       border: 1px solid rgba(255,255,255,0.1);
       border-radius: 8px;
-      padding: 14px 16px;
+      padding: 0 16px;
       font-size: 11px;
       line-height: 1.65;
       color: #aab;
@@ -119,7 +161,11 @@
       transition: max-height 0.4s ease, opacity 0.3s ease, padding 0.3s ease;
     }
     #legend.open {
-      max-height: 520px;
+      /* Fit content; cap by viewport so short screens scroll instead of clipping */
+      max-height: min(560px, calc(100vh - 56px - env(safe-area-inset-bottom, 0px)));
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
       opacity: 1;
       padding: 14px 16px;
     }
@@ -137,15 +183,6 @@
       border-radius: 3px;
       border: 1px solid #444;
       margin-right: 4px;
-    }
-    .face-swatch {
-      display: inline-block;
-      width: 10px;
-      height: 10px;
-      border-radius: 2px;
-      margin-right: 6px;
-      vertical-align: middle;
-      border: 1px solid rgba(255,255,255,0.25);
     }
     #watch-bar {
       display: none;
@@ -220,41 +257,38 @@
   <div id="title">RUBIK</div>
   <button type="button" class="btn secondary" id="legend-toggle" aria-expanded="false">Shortcuts</button>
   <div id="legend" aria-hidden="true">
-    <h3>WCA / SINGMASTER</h3>
-    <div style="font-size:10px;line-height:1.7;margin-bottom:10px;opacity:0.95">
-      Moves use standard notation: <strong>'</strong> = quarter-turn CCW on that face, <strong>2</strong> = half turn.
-      Faces are fixed to the cube (not the viewer): <strong>F</strong> = front toward you, <strong>R</strong> = your right.
-    </div>
-    <h3>FACES (WCA COLORS)</h3>
-    <div style="font-size:10px;line-height:1.85">
-      <div><span class="face-swatch" style="background:#fff"></span><strong>U</strong> Up · white</div>
-      <div><span class="face-swatch" style="background:#ffd500"></span><strong>D</strong> Down · yellow</div>
-      <div><span class="face-swatch" style="background:#009b48"></span><strong>F</strong> Front · green</div>
-      <div><span class="face-swatch" style="background:#0051ba"></span><strong>B</strong> Back · blue</div>
-      <div><span class="face-swatch" style="background:#c41e3a"></span><strong>R</strong> Right · red</div>
-      <div><span class="face-swatch" style="background:#ff5800"></span><strong>L</strong> Left · orange</div>
-    </div>
-    <h3 style="margin-top:12px">SLICES</h3>
-    <div style="font-size:10px;line-height:1.65;margin-bottom:8px">
-      <strong>M</strong> (middle, L–R): same direction as <strong>L</strong>.<br>
-      <strong>E</strong> (equatorial, U–D): same direction as <strong>D</strong>.<br>
-      <strong>S</strong> (standing, F–B): same direction as <strong>F</strong>.
-    </div>
     <h3>KEYBOARD</h3>
-    <div><kbd>U</kbd><kbd>D</kbd><kbd>R</kbd><kbd>L</kbd><kbd>F</kbd><kbd>B</kbd> face CW</div>
-    <div><kbd>Shift</kbd> + same → CCW (<kbd>'</kbd>)</div>
-    <div><kbd>M</kbd> <kbd>E</kbd> <kbd>S</kbd> slices (+ Shift)</div>
-    <div style="margin-top:8px">Left-drag orbit · Right-drag pan · Wheel zoom</div>
-    <div>Drag on face to turn</div>
+    <div><kbd>U</kbd> <kbd>D</kbd> <kbd>R</kbd> <kbd>L</kbd> <kbd>F</kbd> <kbd>B</kbd> — quarter turn clockwise</div>
+    <div><kbd>Shift</kbd> + that key — counter‑clockwise</div>
+    <div><kbd>M</kbd> <kbd>E</kbd> <kbd>S</kbd> — middle slices (<kbd>Shift</kbd> reverses)</div>
+    <h3 style="margin-top:10px">POINTER</h3>
+    <div>Left drag: orbit · Right drag: pan · Wheel: zoom</div>
+    <div>Drag on a sticker: twist (direction follows swipe)</div>
+    <div><strong>Reset</strong> — cube state and camera (target, distance, angle) to defaults for the current <strong>Top</strong> choice</div>
+    <h3 style="margin-top:10px">COLORS</h3>
+    <div style="font-size:10px;opacity:0.92">HUD <strong>Top</strong>: choose which face points toward the top of the screen (saved in this browser). WCA: U white · D yellow · F green · B blue · R red · L orange</div>
   </div>
   <div id="wrap">
     <div id="canvas-host">
-      <div class="glow-ring"></div>
+      <div id="canvas-view">
+        <div class="glow-ring"></div>
+      </div>
     </div>
     <div id="scramble-panel"><span>Scramble:</span><code id="scramble-text"></code></div>
     <div id="solve-panel"><span id="solve-label">Solution:</span><code id="solve-text"></code></div>
     <div id="hud">
       <span class="stat">Moves: <strong id="move-count">0</strong></span>
+      <div class="hud-topface">
+        <label for="top-face-select">Top</label>
+        <select id="top-face-select" aria-label="WCA face toward top of screen">
+          <option value="U">U — white</option>
+          <option value="D">D — yellow</option>
+          <option value="F">F — green</option>
+          <option value="B">B — blue</option>
+          <option value="R">R — red</option>
+          <option value="L">L — orange</option>
+        </select>
+      </div>
       <button type="button" class="btn" id="btn-scramble">Scramble</button>
       <button type="button" class="btn secondary" id="btn-show-scramble">Show Scramble</button>
       <button type="button" class="btn secondary" id="btn-show-solve">Show Solve</button>
@@ -263,7 +297,9 @@
     </div>
     <div id="watch-bar">
       <span class="stat">Playback: <strong id="playback-step">0</strong> / <strong id="playback-total">0</strong></span>
-      <button type="button" class="btn" id="btn-watch-pause">Pause</button>
+      <button type="button" class="btn secondary" id="btn-watch-prev" disabled>Previous</button>
+      <button type="button" class="btn" id="btn-watch-pause" disabled>Pause</button>
+      <button type="button" class="btn secondary" id="btn-watch-next" disabled>Next</button>
     </div>
   </div>
 
@@ -288,6 +324,82 @@
   const CS = (3 - 2 * GAP) / 3;
   const SP = 1;
 
+  /**
+   * Default eye position for **U-up** view (+Y top): front-right-above the cube.
+   * For other Top choices, this vector is rotated so the same octant sits relative to the chosen top face.
+   */
+  const CAMERA_POS_BASE_VEC = new THREE.Vector3(2.6, 2.35, 4.35);
+  const CAMERA_BASE_WORLD_UP = new THREE.Vector3(0, 1, 0);
+  const MOBILE_FRAMING_MAX_WIDTH_PX = 768;
+  /** Pull camera back on narrow viewports so the full cube fits. */
+  const MOBILE_CAMERA_DISTANCE_SCALE = 1.52;
+  /** Default zoom on wide viewports (larger = farther / more cube margin). */
+  const DESKTOP_CAMERA_DISTANCE_SCALE = 1.26;
+
+  function isMobileFramingViewport() {
+    return typeof window.matchMedia === 'function' &&
+      window.matchMedia('(max-width: ' + MOBILE_FRAMING_MAX_WIDTH_PX + 'px)').matches;
+  }
+
+  const TOP_FACE_STORAGE_KEY = 'charlie-rubiks-top-face';
+  /** WCA face → world axis that becomes camera “up” (outward normal from cube center). */
+  const TOP_FACE_UP = {
+    U: [0, 1, 0],
+    D: [0, -1, 0],
+    F: [0, 0, 1],
+    B: [0, 0, -1],
+    R: [1, 0, 0],
+    L: [-1, 0, 0]
+  };
+
+  function normalizeTopFace(face) {
+    const c = String(face || '').toUpperCase().charAt(0);
+    return Object.prototype.hasOwnProperty.call(TOP_FACE_UP, c) ? c : 'U';
+  }
+
+  /** Which WCA face is “top” for camera.up + rotated default offset (kept in sync with Top menu). */
+  let rubiksViewTopFace = 'U';
+
+  function applyCameraFraming() {
+    if (!camera) return;
+    const scale = isMobileFramingViewport() ? MOBILE_CAMERA_DISTANCE_SCALE : DESKTOP_CAMERA_DISTANCE_SCALE;
+    const f = normalizeTopFace(rubiksViewTopFace);
+    const tu = TOP_FACE_UP[f];
+    const targetUp = new THREE.Vector3(tu[0], tu[1], tu[2]);
+    const q = new THREE.Quaternion().setFromUnitVectors(CAMERA_BASE_WORLD_UP, targetUp);
+    const pos = CAMERA_POS_BASE_VEC.clone().applyQuaternion(q).multiplyScalar(scale);
+    camera.position.copy(pos);
+  }
+
+  function loadTopFacePreference() {
+    try {
+      return normalizeTopFace(localStorage.getItem(TOP_FACE_STORAGE_KEY));
+    } catch (e) {
+      return 'U';
+    }
+  }
+
+  function saveTopFacePreference(face) {
+    try {
+      localStorage.setItem(TOP_FACE_STORAGE_KEY, normalizeTopFace(face));
+    } catch (e) { /* private mode / quota */ }
+  }
+
+  function applyTopFaceOrientation(faceLetter) {
+    if (!camera) return;
+    const f = normalizeTopFace(faceLetter);
+    rubiksViewTopFace = f;
+    const u = TOP_FACE_UP[f];
+    camera.up.set(u[0], u[1], u[2]);
+    applyCameraFraming();
+    if (controls) {
+      camera.lookAt(controls.target);
+      controls.update();
+    }
+    const sel = document.getElementById('top-face-select');
+    if (sel && sel.value !== f) sel.value = f;
+  }
+
   let scene, camera, renderer, controls, raycaster, pointer;
   let cubies = [];
   let pivot;
@@ -301,13 +413,42 @@
 
   const faceNames = ['U', 'D', 'F', 'B', 'R', 'L'];
   let stickers = [];
+  /** Logical cube state for Kociemba; kept in lockstep with cubejs so facelets always round-trip. */
+  let solverCube = null;
+
+  /**
+   * cubejs `asString()` order is U,R,F,D,L,B (54 chars). Map to our sticker layout:
+   * stickers[0]=U, [1]=D, [2]=F, [3]=B, [4]=R, [5]=L with WCA colors.
+   */
+  function stickersFromCubeString(str) {
+    if (str.length !== 54) throw new Error('Invalid cube string length');
+    const letterToSticker = { U: 'W', D: 'Y', F: 'G', B: 'B', R: 'R', L: 'O' };
+    const takeFace = (fi) => {
+      const out = [];
+      for (let i = 0; i < 9; i++) {
+        const ch = str[9 * fi + i];
+        const s = letterToSticker[ch];
+        if (s === undefined) throw new Error('Invalid facelet letter: ' + ch);
+        out.push(s);
+      }
+      return out;
+    };
+    const faceU = takeFace(0), faceR = takeFace(1), faceF = takeFace(2), faceD = takeFace(3), faceL = takeFace(4), faceB = takeFace(5);
+    return [faceU, faceD, faceF, faceB, faceR, faceL];
+  }
 
   function initStickers() {
-    stickers = [
-      Array(9).fill('W'), Array(9).fill('Y'),
-      Array(9).fill('G'), Array(9).fill('B'),
-      Array(9).fill('R'), Array(9).fill('O')
-    ];
+    if (typeof Cube === 'undefined') {
+      stickers = [
+        Array(9).fill('W'), Array(9).fill('Y'),
+        Array(9).fill('G'), Array(9).fill('B'),
+        Array(9).fill('R'), Array(9).fill('O')
+      ];
+      solverCube = null;
+      return;
+    }
+    solverCube = new Cube();
+    stickers = stickersFromCubeString(solverCube.asString());
   }
   initStickers();
 
@@ -315,158 +456,45 @@
     return stickers.map(f => f.slice());
   }
 
-  function rotateFaceArr(arr, cw) {
-    const a = arr.slice();
-    if (cw) {
-      return [a[6], a[3], a[0], a[7], a[4], a[1], a[8], a[5], a[2]];
-    }
-    return [a[2], a[5], a[8], a[1], a[4], a[7], a[0], a[3], a[6]];
+  function applyMoveToStickers(move) {
+    if (typeof Cube === 'undefined') return;
+    if (!solverCube) solverCube = new Cube();
+    solverCube.move(moveToNotation(move));
+    stickers = stickersFromCubeString(solverCube.asString());
   }
 
-  function applyMoveToStickers(move) {
-    const U = stickers[0], D = stickers[1], F = stickers[2], B = stickers[3], R = stickers[4], L = stickers[5];
-    const cw = !move.prime;
-    const double = move.double;
-    const times = double ? 2 : 1;
-    for (let t = 0; t < times; t++) {
-      switch (move.face) {
-        case 'U': {
-          if (cw) {
-            stickers[0] = rotateFaceArr(U, true);
-            const f = F.slice(0, 3), r = R.slice(0, 3), b = B.slice(0, 3), l = L.slice(0, 3);
-            for (let i = 0; i < 3; i++) { F[i] = l[i]; R[i] = f[i]; B[i] = r[i]; L[i] = b[i]; }
-          } else {
-            stickers[0] = rotateFaceArr(U, false);
-            const f = F.slice(0, 3), r = R.slice(0, 3), b = B.slice(0, 3), l = L.slice(0, 3);
-            for (let i = 0; i < 3; i++) { F[i] = r[i]; R[i] = b[i]; B[i] = l[i]; L[i] = f[i]; }
-          }
-          break;
-        }
-        case 'D': {
-          if (cw) {
-            stickers[1] = rotateFaceArr(D, true);
-            const f = F.slice(6, 9), r = R.slice(6, 9), b = B.slice(6, 9), l = L.slice(6, 9);
-            for (let i = 0; i < 3; i++) { F[6 + i] = l[i]; R[6 + i] = f[i]; B[6 + i] = r[i]; L[6 + i] = b[i]; }
-          } else {
-            stickers[1] = rotateFaceArr(D, false);
-            const f = F.slice(6, 9), r = R.slice(6, 9), b = B.slice(6, 9), l = L.slice(6, 9);
-            for (let i = 0; i < 3; i++) { F[6 + i] = r[i]; R[6 + i] = b[i]; B[6 + i] = l[i]; L[6 + i] = f[i]; }
-          }
-          break;
-        }
-        case 'F': {
-          if (cw) {
-            stickers[2] = rotateFaceArr(F, true);
-            const u = [U[6], U[7], U[8]], rr = [R[0], R[3], R[6]], dd = [D[2], D[1], D[0]], ll = [L[8], L[5], L[2]];
-            [R[0], R[3], R[6]] = u;
-            [D[2], D[1], D[0]] = rr;
-            [L[8], L[5], L[2]] = dd;
-            [U[6], U[7], U[8]] = ll;
-          } else {
-            stickers[2] = rotateFaceArr(F, false);
-            const u = [U[6], U[7], U[8]], rr = [R[0], R[3], R[6]], dd = [D[2], D[1], D[0]], ll = [L[8], L[5], L[2]];
-            [R[0], R[3], R[6]] = dd;
-            [D[2], D[1], D[0]] = ll;
-            [L[8], L[5], L[2]] = u;
-            [U[6], U[7], U[8]] = rr;
-          }
-          break;
-        }
-        case 'B': {
-          if (cw) {
-            stickers[3] = rotateFaceArr(B, true);
-            const u = [U[0], U[1], U[2]], rr = [R[2], R[5], R[8]], dd = [D[8], D[7], D[6]], ll = [L[0], L[3], L[6]];
-            [R[2], R[5], R[8]] = u;
-            [D[8], D[7], D[6]] = rr;
-            [L[0], L[3], L[6]] = dd;
-            [U[0], U[1], U[2]] = ll;
-          } else {
-            stickers[3] = rotateFaceArr(B, false);
-            const u = [U[0], U[1], U[2]], rr = [R[2], R[5], R[8]], dd = [D[8], D[7], D[6]], ll = [L[0], L[3], L[6]];
-            [R[2], R[5], R[8]] = dd;
-            [D[8], D[7], D[6]] = ll;
-            [L[0], L[3], L[6]] = u;
-            [U[0], U[1], U[2]] = rr;
-          }
-          break;
-        }
-        case 'R': {
-          if (cw) {
-            stickers[4] = rotateFaceArr(R, true);
-            const u = [U[2], U[5], U[8]], ff = [F[2], F[5], F[8]], dd = [D[2], D[5], D[8]], bb = [B[6], B[3], B[0]];
-            [F[2], F[5], F[8]] = u;
-            [D[2], D[5], D[8]] = ff;
-            [B[6], B[3], B[0]] = dd;
-            [U[2], U[5], U[8]] = bb;
-          } else {
-            stickers[4] = rotateFaceArr(R, false);
-            const u = [U[2], U[5], U[8]], ff = [F[2], F[5], F[8]], dd = [D[2], D[5], D[8]], bb = [B[6], B[3], B[0]];
-            [F[2], F[5], F[8]] = dd;
-            [D[2], D[5], D[8]] = bb;
-            [B[6], B[3], B[0]] = u;
-            [U[2], U[5], U[8]] = ff;
-          }
-          break;
-        }
-        case 'L': {
-          if (cw) {
-            stickers[5] = rotateFaceArr(L, true);
-            const u = [U[0], U[3], U[6]], ff = [F[0], F[3], F[6]], dd = [D[0], D[3], D[6]], bb = [B[8], B[5], B[2]];
-            [U[0], U[3], U[6]] = bb;
-            [F[0], F[3], F[6]] = u;
-            [D[0], D[3], D[6]] = ff;
-            [B[8], B[5], B[2]] = dd;
-          } else {
-            stickers[5] = rotateFaceArr(L, false);
-            const u = [U[0], U[3], U[6]], ff = [F[0], F[3], F[6]], dd = [D[0], D[3], D[6]], bb = [B[8], B[5], B[2]];
-            [U[0], U[3], U[6]] = ff;
-            [F[0], F[3], F[6]] = dd;
-            [D[0], D[3], D[6]] = bb;
-            [B[8], B[5], B[2]] = u;
-          }
-          break;
-        }
-        case 'M': {
-          const ou = [U[1], U[4], U[7]], of = [F[1], F[4], F[7]], od = [D[1], D[4], D[7]], ob = [B[7], B[4], B[1]];
-          if (cw) {
-            [U[1], U[4], U[7]] = of.slice();
-            [F[1], F[4], F[7]] = od.slice();
-            [D[1], D[4], D[7]] = ob.slice();
-            [B[7], B[4], B[1]] = [ou[2], ou[1], ou[0]];
-          } else {
-            [F[1], F[4], F[7]] = ou.slice();
-            [D[1], D[4], D[7]] = of.slice();
-            [B[7], B[4], B[1]] = [od[2], od[1], od[0]];
-            [U[1], U[4], U[7]] = [ob[2], ob[1], ob[0]];
-          }
-          break;
-        }
-        case 'E': {
-          if (cw) {
-            const f = F.slice(3, 6), r = R.slice(3, 6), b = B.slice(3, 6), l = L.slice(3, 6);
-            for (let i = 0; i < 3; i++) { F[3 + i] = l[i]; R[3 + i] = f[i]; B[3 + i] = r[i]; L[3 + i] = b[i]; }
-          } else {
-            const f = F.slice(3, 6), r = R.slice(3, 6), b = B.slice(3, 6), l = L.slice(3, 6);
-            for (let i = 0; i < 3; i++) { F[3 + i] = r[i]; R[3 + i] = b[i]; B[3 + i] = l[i]; L[3 + i] = f[i]; }
-          }
-          break;
-        }
-        case 'S': {
-          if (cw) {
-            const u = [U[3], U[4], U[5]], rr = [R[1], R[4], R[7]], dd = [D[3], D[4], D[5]], ll = [L[1], L[4], L[7]];
-            [R[1], R[4], R[7]] = u.slice();
-            [D[3], D[4], D[5]] = rr.slice();
-            [L[1], L[4], L[7]] = dd.slice();
-            [U[3], U[4], U[5]] = ll.slice();
-          } else {
-            const u = [U[3], U[4], U[5]], rr = [R[1], R[4], R[7]], dd = [D[3], D[4], D[5]], ll = [L[1], L[4], L[7]];
-            [R[1], R[4], R[7]] = dd.slice();
-            [D[3], D[4], D[5]] = ll.slice();
-            [L[1], L[4], L[7]] = u.slice();
-            [U[3], U[4], U[5]] = rr.slice();
-          }
-          break;
-        }
+  /** WCA sticker letter → logical color key used in COL */
+  const FACELET_LETTER_TO_STICKER = { U: 'W', D: 'Y', F: 'G', B: 'B', R: 'R', L: 'O' };
+
+  /**
+   * Snap cubies to the grid and repaint materials from solverCube (cubejs facelet string).
+   * Slice animations follow the pre–cubejs sticker model; logical state is driven by cubejs, so without this the mesh desyncs.
+   */
+  function syncCubieMeshesToSolverCube() {
+    if (!solverCube || typeof Cube === 'undefined' || !cubies || !cubies.length) return;
+    const str = solverCube.asString();
+    for (let c = 0; c < cubies.length; c++) {
+      const mesh = cubies[c];
+      const ix = mesh.userData.ix;
+      const iy = mesh.userData.iy;
+      const iz = mesh.userData.iz;
+      mesh.position.set(ix * SP, iy * SP, iz * SP);
+      mesh.quaternion.set(0, 0, 0, 1);
+      const mats = mesh.userData.mats;
+      for (let mi = 0; mi < 6; mi++) {
+        let ch = null;
+        if (mi === 0 && ix === 1) ch = str[9 * 1 + (1 - iy) * 3 + (1 - iz)];
+        else if (mi === 1 && ix === -1) ch = str[9 * 4 + (1 - iy) * 3 + (iz + 1)];
+        else if (mi === 2 && iy === 1) ch = str[9 * 0 + (iz + 1) * 3 + (ix + 1)];
+        /* D face: cubejs _D(1).._D(3) sit on the F side (iz=+1), _D(7).._D(9) on B (iz=-1) — opposite row order to U, so use (1-iz) not (iz+1). */
+        else if (mi === 3 && iy === -1) ch = str[9 * 3 + (1 - iz) * 3 + (ix + 1)];
+        /* F/B columns: cubejs F uses _F(1) at UFL (ix=-1) … _F(3) at URF (ix=1) → slot col = ix+1. B is mirrored: _B(1) at UBR … _B(3) at ULB → col = 1-ix. */
+        else if (mi === 4 && iz === 1) ch = str[9 * 2 + (1 - iy) * 3 + (ix + 1)];
+        else if (mi === 5 && iz === -1) ch = str[9 * 5 + (1 - iy) * 3 + (1 - ix)];
+        const sticker = ch ? FACELET_LETTER_TO_STICKER[ch] : 'X';
+        mats[mi].color.setHex(COL[sticker]);
+        mats[mi].emissive.setHex(0);
+        mats[mi].emissiveIntensity = 0;
       }
     }
   }
@@ -485,18 +513,6 @@
   function invertMove(m) {
     if (m.double) return { face: m.face, prime: false, double: true };
     return { face: m.face, prime: !m.prime, double: false };
-  }
-
-  function stickerColorToFaceletLetter(c) {
-    return ({ W: 'U', Y: 'D', G: 'F', B: 'B', R: 'R', O: 'L' })[c];
-  }
-
-  function getSolverFacelets() {
-    const faces = [stickers[0], stickers[4], stickers[2], stickers[1], stickers[5], stickers[3]];
-    let s = '';
-    for (let f = 0; f < 6; f++)
-      for (let i = 0; i < 9; i++) s += stickerColorToFaceletLetter(faces[f][i]);
-    return s;
   }
 
   function parseKociembaSolutionString(str) {
@@ -543,16 +559,13 @@
       return Promise.resolve({ solved: true, sol: '', moves: [] });
     }
     return ensureCubeWorkerReady().then(() => new Promise((resolve, reject) => {
-      let facelets;
-      try {
-        facelets = getSolverFacelets();
-      } catch (e) {
-        reject(e);
+      if (!solverCube) {
+        reject(new Error('Solver cube state not initialized'));
         return;
       }
       let cube;
       try {
-        cube = Cube.fromString(facelets);
+        cube = new Cube(solverCube.toJSON());
       } catch (e) {
         reject(new Error('Invalid cube state for solver: ' + e.message));
         return;
@@ -583,7 +596,11 @@
   }
 
   function selfTestSliceCycles() {
-    const save = stickers.map(f => f.slice());
+    const saveStickers = stickers.map(f => f.slice());
+    let saveJson = null;
+    if (solverCube) {
+      try { saveJson = solverCube.toJSON(); } catch (e) { /* ignore */ }
+    }
     try {
       const faces = ['M', 'E', 'S'];
       for (let k = 0; k < 3; k++) {
@@ -595,7 +612,13 @@
       }
       console.log('charlie-rubiks self-test OK: M^4, E^4, S^4 return to solved');
     } finally {
-      stickers = save.map(f => f.slice());
+      if (saveJson && typeof Cube !== 'undefined') {
+        solverCube = new Cube(saveJson);
+        stickers = stickersFromCubeString(solverCube.asString());
+      } else {
+        stickers = saveStickers.map(f => f.slice());
+      }
+      syncCubieMeshesToSolverCube();
     }
   }
 
@@ -632,7 +655,12 @@
       case 'B': ax.set(0, 0, 1); sign = -1; break;
       default: ax.set(0, 1, 0);
     }
-    return { axis: ax, angle: k * h * sign };
+    /*
+     * Negative sign: Three.js +axis-angle must match cubejs `Cube.moves` chirality. A positive angle
+     * here was rotating slices opposite the sticker update, so meshes matched at t=1-ε but jumped when
+     * sync repainted from solver state.
+     */
+    return { axis: ax, angle: -k * h * sign };
   }
 
   function orthonormalTangentBasis(n) {
@@ -705,6 +733,58 @@
     return n.x > 0 ? 'R' : 'L';
   }
 
+  /** Outward world normal for the face that turns (for tangent basis / prime). */
+  function worldNormalForTurnFace(face) {
+    switch (face) {
+      case 'U': return new THREE.Vector3(0, 1, 0);
+      case 'D': return new THREE.Vector3(0, -1, 0);
+      case 'R': return new THREE.Vector3(1, 0, 0);
+      case 'L': return new THREE.Vector3(-1, 0, 0);
+      case 'F': return new THREE.Vector3(0, 0, 1);
+      case 'B': return new THREE.Vector3(0, 0, -1);
+      case 'M': return new THREE.Vector3(1, 0, 0);
+      case 'E': return new THREE.Vector3(0, 1, 0);
+      case 'S': return new THREE.Vector3(0, 0, 1);
+      default: return new THREE.Vector3(0, 0, 1);
+    }
+  }
+
+  /**
+   * Which slice to turn from a swipe on a sticker: use cubie grid (ix,iy,iz), which box face was hit
+   * (0=+X…5=-Z), and whether the gesture is mostly horizontal vs vertical on screen.
+   * Without this, every drag on the front face used normal +Z → always F.
+   */
+  function pickSliceFromStickerSwipe(faceIdx, ix, iy, iz, mostlyHorizontal) {
+    switch (faceIdx) {
+      case 4: /* +Z F */
+        return mostlyHorizontal
+          ? (iy === 1 ? 'U' : iy === 0 ? 'E' : 'D')
+          : (ix === -1 ? 'L' : ix === 0 ? 'M' : 'R');
+      case 5: /* -Z B */
+        return mostlyHorizontal
+          ? (iy === 1 ? 'U' : iy === 0 ? 'E' : 'D')
+          : (ix === -1 ? 'L' : ix === 0 ? 'M' : 'R');
+      case 0: /* +X R */
+        return mostlyHorizontal
+          ? (iy === 1 ? 'U' : iy === 0 ? 'E' : 'D')
+          : (iz === 1 ? 'F' : iz === 0 ? 'S' : 'B');
+      case 1: /* -X L */
+        return mostlyHorizontal
+          ? (iy === 1 ? 'U' : iy === 0 ? 'E' : 'D')
+          : (iz === 1 ? 'F' : iz === 0 ? 'S' : 'B');
+      case 2: /* +Y U */
+        return mostlyHorizontal
+          ? (ix === -1 ? 'L' : ix === 0 ? 'M' : 'R')
+          : (iz === 1 ? 'F' : iz === 0 ? 'S' : 'B');
+      case 3: /* -Y D */
+        return mostlyHorizontal
+          ? (ix === -1 ? 'L' : ix === 0 ? 'M' : 'R')
+          : (iz === 1 ? 'F' : iz === 0 ? 'S' : 'B');
+      default:
+        return 'F';
+    }
+  }
+
   function snapCubieGrid(c) {
     c.userData.ix = Math.round(c.position.x / SP);
     c.userData.iy = Math.round(c.position.y / SP);
@@ -714,7 +794,7 @@
     c.userData.iz = Math.max(-1, Math.min(1, c.userData.iz));
   }
 
-  function animateSlice(move, duration, onDone) {
+  function animateSlice(move, duration, countMove, onDone) {
     const list = getSliceCubies(move.face);
     if (!list.length) { onDone(); updateWatchButton(); return; }
     const { axis, angle } = getAxisAngle(move);
@@ -737,7 +817,12 @@
           snapCubieGrid(mesh);
         });
         pivot.quaternion.set(0, 0, 0, 1);
+        if (countMove) {
+          moveCount++;
+          document.getElementById('move-count').textContent = String(moveCount);
+        }
         applyMoveToStickers(move);
+        syncCubieMeshesToSolverCube();
         if (!isSolvedStickers()) wasEverUnsolved = true;
         else if (wasEverUnsolved) {
           wasEverUnsolved = false;
@@ -762,11 +847,7 @@
     if (animating || !moveQueue.length) return;
     animating = true;
     const { move, duration, countMove, res } = moveQueue.shift();
-    animateSlice(move, duration, () => {
-      if (countMove) {
-        moveCount++;
-        document.getElementById('move-count').textContent = moveCount;
-      }
+    animateSlice(move, duration, countMove, () => {
       animating = false;
       res();
       pumpQueue();
@@ -798,25 +879,43 @@
     const mesh = new THREE.Mesh(geo, mats);
     mesh.position.set(ix * SP, iy * SP, iz * SP);
     mesh.userData = { ix, iy, iz, mats };
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
     return mesh;
+  }
+
+  function layoutCanvasSquare() {
+    const host = document.getElementById('canvas-host');
+    const view = document.getElementById('canvas-view');
+    if (!host || !view) return;
+    const side = Math.max(1, Math.floor(Math.min(host.clientWidth, host.clientHeight)));
+    view.style.width = side + 'px';
+    view.style.height = side + 'px';
+    if (camera && renderer) {
+      camera.aspect = 1;
+      camera.updateProjectionMatrix();
+      renderer.setSize(side, side);
+    }
   }
 
   function init() {
     const host = document.getElementById('canvas-host');
+    const view = document.getElementById('canvas-view');
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0d0d0f);
 
-    camera = new THREE.PerspectiveCamera(45, host.clientWidth / host.clientHeight, 0.1, 100);
-    /* Default view: white (U, +Y) up, green (F, +Z) toward viewer */
-    camera.position.set(2.6, 2.35, 4.35);
+    const side0 = Math.max(1, Math.floor(Math.min(host.clientWidth, host.clientHeight)));
+    view.style.width = side0 + 'px';
+    view.style.height = side0 + 'px';
+    camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+    camera.up.set(0, 1, 0);
+    applyCameraFraming();
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(host.clientWidth, host.clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    host.appendChild(renderer.domElement);
+    renderer.setSize(side0, side0);
+    renderer.shadowMap.enabled = false;
+    view.appendChild(renderer.domElement);
 
     const OC = THREE.OrbitControls || window.OrbitControls;
     controls = new OC(camera, renderer.domElement);
@@ -829,18 +928,34 @@
     controls.touches.ONE = THREE.TOUCH.ROTATE;
     controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
 
-    const amb = new THREE.AmbientLight(0x404060, 0.6);
+    const topFaceSelect = document.getElementById('top-face-select');
+    const topFaceInitial = loadTopFacePreference();
+    if (topFaceSelect) topFaceSelect.value = topFaceInitial;
+    applyTopFaceOrientation(topFaceInitial);
+
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(function () {
+        layoutCanvasSquare();
+        applyCameraFraming();
+        if (controls) controls.update();
+      });
+      ro.observe(host);
+    }
+
+    /* Even fill so every sticker reads clearly from any orbit (no “bottom” face in shadow). */
+    const hemi = new THREE.HemisphereLight(0xb8c0d0, 0x606878, 0.72);
+    scene.add(hemi);
+    const amb = new THREE.AmbientLight(0x9098a4, 0.52);
     scene.add(amb);
-    const key = new THREE.DirectionalLight(0xffffff, 0.85);
-    key.position.set(4, 8, 6);
-    key.castShadow = true;
+    const key = new THREE.DirectionalLight(0xffffff, 0.32);
+    key.position.set(4.5, 6, 5);
     scene.add(key);
-    const fill = new THREE.DirectionalLight(0x4488ff, 0.25);
-    fill.position.set(-5, 2, -4);
-    scene.add(fill);
-    const rim = new THREE.PointLight(0x00aacc, 0.4, 20);
-    rim.position.set(0, -2, 3);
-    scene.add(rim);
+    const fillLow = new THREE.DirectionalLight(0xf0f4fa, 0.26);
+    fillLow.position.set(-2, -6, -3);
+    scene.add(fillLow);
+    const fillSide = new THREE.DirectionalLight(0xd8e4ff, 0.2);
+    fillSide.position.set(-5, 1, 4);
+    scene.add(fillSide);
 
     pivot = new THREE.Object3D();
     scene.add(pivot);
@@ -900,9 +1015,14 @@
       controls.enabled = true;
       if (dist < 15) { drag = null; return; }
 
-      const n = drag.normal;
-      const face = faceLetterFromNormal(n);
-      const [e1, e2] = orthonormalTangentBasis(n);
+      /* Touch: invert screen Y (see 0.4.8); use same tdy for horiz vs vert classification. */
+      const tdy = drag.touchId != null ? -dy : dy;
+      const mostlyHorizontal = Math.abs(dx) >= Math.abs(tdy);
+      const dragPix = new THREE.Vector2(dx, tdy);
+
+      const face = pickSliceFromStickerSwipe(drag.faceIdx, drag.ix, drag.iy, drag.iz, mostlyHorizontal);
+      const nTurn = worldNormalForTurnFace(face);
+      const [e1, e2] = orthonormalTangentBasis(nTurn);
       const origin = drag.hitPoint;
       const el = renderer.domElement;
       const eps = 0.38;
@@ -917,7 +1037,6 @@
       if (u2.lengthSq() < 1e-10) { drag = null; return; }
       u2.normalize();
 
-      const dragPix = new THREE.Vector2(dx, dy);
       const a = dragPix.dot(u1);
       const b = dragPix.dot(u2);
       if (Math.abs(a) < 1e-6 && Math.abs(b) < 1e-6) { drag = null; return; }
@@ -926,10 +1045,15 @@
       const sign = useFirst ? Math.sign(a) || 1 : Math.sign(b) || 1;
       const tangent = useFirst ? e1.clone().multiplyScalar(sign) : e2.clone().multiplyScalar(sign);
       const viewDir = new THREE.Vector3().subVectors(camera.position, origin).normalize();
-      const rotPole = new THREE.Vector3().crossVectors(n, tangent);
+      const rotPole = new THREE.Vector3().crossVectors(nTurn, tangent);
       let prime = rotPole.dot(viewDir) < 0;
       const move = { face, prime, double: false };
       if (face === 'D' || face === 'B' || face === 'L') move.prime = !move.prime;
+      /*
+       * Touch uses inverted screen Y (tdy). After getAxisAngle was negated (0.4.25), vertical swipes
+       * need a prime invert; horizontal swipes do not (inverting both made horizontals backwards).
+       */
+      if (drag.touchId != null && !mostlyHorizontal) move.prime = !move.prime;
 
       userMoveDuringSession = true;
       enqueue(move, 300, true);
@@ -1014,6 +1138,7 @@
     animate();
     updateWatchButton();
     selfTestSliceCycles();
+    syncCubieMeshesToSolverCube();
     ensureCubeWorkerReady().catch(function () {
       console.warn('charlie-rubiks: Kociemba worker not ready yet (will retry on Show/Watch Solve)');
     });
@@ -1021,10 +1146,9 @@
   }
 
   function onResize() {
-    const host = document.getElementById('canvas-host');
-    camera.aspect = host.clientWidth / host.clientHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(host.clientWidth, host.clientHeight);
+    layoutCanvasSquare();
+    applyCameraFraming();
+    if (controls) controls.update();
   }
 
   function animate() {
@@ -1053,55 +1177,150 @@
     return { face: f, prime: false, double: true };
   }
 
-  async function runScramble() {
-    document.getElementById('btn-scramble').disabled = true;
-    scrambleMoves = [];
-    for (let i = 0; i < 20; i++) {
-      let m;
-      do { m = randomMove(); } while (scrambleMoves.length && scrambleMoves[scrambleMoves.length - 1].face === m.face);
-      scrambleMoves.push(m);
-    }
-    lastScrambleNotation = scrambleMoves.map(moveToNotation).join(' ');
-    userMoveDuringSession = false;
-    moveCount = 0;
-    document.getElementById('move-count').textContent = '0';
-    for (const m of scrambleMoves) {
-      await enqueue(m, 80, false);
-    }
-    document.getElementById('btn-scramble').disabled = false;
-    updateWatchButton();
-  }
-
-  function resetCube() {
-    moveQueue = [];
-    animating = false;
-    cubies.forEach(c => scene.remove(c));
-    cubies = [];
-    for (let ix = -1; ix <= 1; ix++)
-      for (let iy = -1; iy <= 1; iy++)
-        for (let iz = -1; iz <= 1; iz++) {
-          const m = buildCubie(ix, iy, iz);
-          scene.add(m);
-          cubies.push(m);
-        }
-    initStickers();
-    scrambleMoves = [];
-    lastScrambleNotation = '';
-    moveCount = 0;
-    document.getElementById('move-count').textContent = '0';
-    document.getElementById('scramble-text').textContent = '';
-    document.getElementById('solve-text').textContent = '';
-    document.getElementById('scramble-panel').classList.remove('open');
-    document.getElementById('solve-panel').classList.remove('open');
-    document.getElementById('watch-bar').classList.remove('active');
-    wasEverUnsolved = false;
-    document.getElementById('solved-overlay').classList.remove('visible');
-    updateWatchButton();
-  }
-
   let watchPlaying = false;
   let watchPaused = false;
   let watchMoves = [];
+  let watchCursor = 0;
+  let watchStepBusy = false;
+
+  function showWatchPlaybackBar() {
+    const bar = document.getElementById('watch-bar');
+    if (bar) bar.classList.add('active');
+    const totalEl = document.getElementById('playback-total');
+    if (totalEl) totalEl.textContent = String(watchMoves.length);
+    syncWatchPauseButton();
+    updateWatchPlaybackUi();
+  }
+
+  function hideWatchPlaybackBar() {
+    watchPlaying = false;
+    watchPaused = false;
+    watchMoves = [];
+    watchCursor = 0;
+    watchStepBusy = false;
+    const bar = document.getElementById('watch-bar');
+    if (bar) bar.classList.remove('active');
+    syncWatchPauseButton();
+    updateWatchPlaybackUi();
+  }
+
+  function updateWatchPlaybackUi() {
+    const stepEl = document.getElementById('playback-step');
+    const prevEl = document.getElementById('btn-watch-prev');
+    const nextEl = document.getElementById('btn-watch-next');
+    const n = watchMoves.length;
+    if (stepEl) stepEl.textContent = String(watchCursor);
+    const atEnd = watchCursor >= n;
+    const atStart = watchCursor <= 0;
+    const steppingDisabled = watchPlaying && !watchPaused;
+    if (prevEl) prevEl.disabled = atStart || steppingDisabled || watchStepBusy;
+    if (nextEl) nextEl.disabled = atEnd || steppingDisabled || watchStepBusy;
+  }
+
+  function syncWatchPauseButton() {
+    const pauseBtn = document.getElementById('btn-watch-pause');
+    if (!pauseBtn) return;
+    const n = watchMoves.length;
+    const busy = watchStepBusy;
+    if (n === 0) {
+      pauseBtn.textContent = 'Pause';
+      pauseBtn.disabled = true;
+      return;
+    }
+    const atEnd = watchCursor >= n;
+    if (watchPlaying) {
+      pauseBtn.disabled = busy;
+      pauseBtn.textContent = watchPaused ? 'Resume' : 'Pause';
+    } else if (atEnd) {
+      pauseBtn.textContent = 'Play';
+      pauseBtn.disabled = true;
+    } else {
+      pauseBtn.textContent = 'Play';
+      pauseBtn.disabled = busy;
+    }
+  }
+
+  async function stepWatchForward() {
+    if (watchCursor >= watchMoves.length) return;
+    await enqueue(watchMoves[watchCursor], 300, true);
+    watchCursor++;
+  }
+
+  async function stepWatchBackward() {
+    if (watchCursor <= 0) return;
+    watchCursor--;
+    const inv = invertMove(watchMoves[watchCursor]);
+    await enqueue(inv, 300, false);
+    if (moveCount > 0) {
+      moveCount--;
+      document.getElementById('move-count').textContent = String(moveCount);
+    }
+  }
+
+  async function watchPlaybackAutoLoop() {
+    while (watchPlaying && watchCursor < watchMoves.length) {
+      while (watchPaused && watchPlaying) {
+        await new Promise(r => setTimeout(r, 80));
+      }
+      if (!watchPlaying) break;
+      if (watchCursor >= watchMoves.length) break;
+      await stepWatchForward();
+      updateWatchPlaybackUi();
+    }
+    watchPlaying = false;
+    watchPaused = false;
+    syncWatchPauseButton();
+    updateWatchPlaybackUi();
+    updateWatchButton();
+  }
+
+  function onWatchPauseToggle() {
+    const n = watchMoves.length;
+    if (n === 0) return;
+    if (watchCursor >= n && !watchPlaying) return;
+    if (watchPlaying) {
+      watchPaused = !watchPaused;
+      syncWatchPauseButton();
+      updateWatchPlaybackUi();
+    } else {
+      if (watchCursor >= n) return;
+      watchPlaying = true;
+      watchPaused = false;
+      syncWatchPauseButton();
+      updateWatchPlaybackUi();
+      void watchPlaybackAutoLoop();
+    }
+  }
+
+  async function onWatchPrevClick() {
+    if (watchMoves.length === 0 || watchCursor <= 0 || watchStepBusy) return;
+    watchPaused = true;
+    watchStepBusy = true;
+    syncWatchPauseButton();
+    updateWatchPlaybackUi();
+    try {
+      await stepWatchBackward();
+    } finally {
+      watchStepBusy = false;
+      updateWatchPlaybackUi();
+      syncWatchPauseButton();
+    }
+  }
+
+  async function onWatchNextClick() {
+    if (watchMoves.length === 0 || watchCursor >= watchMoves.length || watchStepBusy) return;
+    watchPaused = true;
+    watchStepBusy = true;
+    syncWatchPauseButton();
+    updateWatchPlaybackUi();
+    try {
+      await stepWatchForward();
+    } finally {
+      watchStepBusy = false;
+      updateWatchPlaybackUi();
+      syncWatchPauseButton();
+    }
+  }
 
   async function watchSolve() {
     if (watchPlaying) return;
@@ -1136,19 +1355,65 @@
       return;
     }
     watchMoves = data.moves;
-    document.getElementById('watch-bar').classList.add('active');
-    document.getElementById('playback-total').textContent = watchMoves.length;
-    document.getElementById('btn-watch-pause').textContent = 'Pause';
-    watchPlaying = true;
+    watchCursor = 0;
     watchPaused = false;
-    for (let i = 0; i < watchMoves.length; i++) {
-      while (watchPaused) await new Promise(r => setTimeout(r, 80));
-      document.getElementById('playback-step').textContent = String(i + 1);
-      await enqueue(watchMoves[i], 300, true);
+    showWatchPlaybackBar();
+    watchPlaying = true;
+    syncWatchPauseButton();
+    updateWatchPlaybackUi();
+    await watchPlaybackAutoLoop();
+  }
+
+  async function runScramble() {
+    document.getElementById('btn-scramble').disabled = true;
+    hideWatchPlaybackBar();
+    scrambleMoves = [];
+    for (let i = 0; i < 20; i++) {
+      let m;
+      do { m = randomMove(); } while (scrambleMoves.length && scrambleMoves[scrambleMoves.length - 1].face === m.face);
+      scrambleMoves.push(m);
     }
-    document.getElementById('watch-bar').classList.remove('active');
-    watchPlaying = false;
+    lastScrambleNotation = scrambleMoves.map(moveToNotation).join(' ');
+    userMoveDuringSession = false;
+    moveCount = 0;
+    document.getElementById('move-count').textContent = '0';
+    for (const m of scrambleMoves) {
+      await enqueue(m, 80, false);
+    }
+    document.getElementById('btn-scramble').disabled = false;
     updateWatchButton();
+  }
+
+  function resetCube() {
+    moveQueue = [];
+    animating = false;
+    cubies.forEach(c => scene.remove(c));
+    cubies = [];
+    for (let ix = -1; ix <= 1; ix++)
+      for (let iy = -1; iy <= 1; iy++)
+        for (let iz = -1; iz <= 1; iz++) {
+          const m = buildCubie(ix, iy, iz);
+          scene.add(m);
+          cubies.push(m);
+        }
+    initStickers();
+    syncCubieMeshesToSolverCube();
+    scrambleMoves = [];
+    lastScrambleNotation = '';
+    moveCount = 0;
+    document.getElementById('move-count').textContent = '0';
+    document.getElementById('scramble-text').textContent = '';
+    document.getElementById('solve-text').textContent = '';
+    document.getElementById('scramble-panel').classList.remove('open');
+    document.getElementById('solve-panel').classList.remove('open');
+    hideWatchPlaybackBar();
+    wasEverUnsolved = false;
+    document.getElementById('solved-overlay').classList.remove('visible');
+    updateWatchButton();
+    if (controls && camera) {
+      controls.target.set(0, 0, 0);
+      applyTopFaceOrientation(rubiksViewTopFace);
+    }
   }
 
   document.getElementById('btn-scramble').addEventListener('click', runScramble);
@@ -1169,6 +1434,13 @@
       if (data.solved) document.getElementById('solve-text').textContent = 'Already solved (0 moves)';
       else document.getElementById('solve-text').textContent = data.sol || '(no solution)';
       document.getElementById('solve-panel').classList.add('open');
+      if (!data.solved && data.moves && data.moves.length) {
+        watchPlaying = false;
+        watchPaused = false;
+        watchMoves = data.moves;
+        watchCursor = 0;
+        showWatchPlaybackBar();
+      }
     } catch (e) {
       document.getElementById('solve-label').textContent = 'Kociemba solution';
       document.getElementById('solve-text').textContent = 'Error: ' + e.message;
@@ -1179,8 +1451,17 @@
     }
   });
   document.getElementById('btn-watch').addEventListener('click', () => { watchSolve(); });
-  document.getElementById('btn-watch-pause').addEventListener('click', () => { watchPaused = !watchPaused; document.getElementById('btn-watch-pause').textContent = watchPaused ? 'Resume' : 'Pause'; });
+  document.getElementById('btn-watch-pause').addEventListener('click', onWatchPauseToggle);
+  document.getElementById('btn-watch-prev').addEventListener('click', () => { void onWatchPrevClick(); });
+  document.getElementById('btn-watch-next').addEventListener('click', () => { void onWatchNextClick(); });
   document.getElementById('btn-reset').addEventListener('click', resetCube);
+  const topFaceSelectEl = document.getElementById('top-face-select');
+  if (topFaceSelectEl) {
+    topFaceSelectEl.addEventListener('change', function () {
+      saveTopFacePreference(topFaceSelectEl.value);
+      applyTopFaceOrientation(topFaceSelectEl.value);
+    });
+  }
   document.getElementById('legend-toggle').addEventListener('click', () => {
     const l = document.getElementById('legend');
     const open = l.classList.toggle('open');
