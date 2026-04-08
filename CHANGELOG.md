@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.31] - 2026-04-08
+
+### Fixed
+
+- Call slice completion `onDone` before `updateUndoRedoUi` so `animating` is cleared; undo/redo buttons no longer stay disabled after each turn.
+
+## [0.4.30] - 2026-04-08
+
+### Added
+
+- HUD **Undo** and **Redo** buttons with a move history stack; **Ctrl+Z** / **Ctrl+Shift+Z** / **Ctrl+Y** shortcuts; clear history on Reset and Scramble; disable while Kociemba playback UI is active or while a turn is animating.
+- HUD **Keys** selector: **WCA fixed** (default) or **View** (remap **U**/**D**/**R**/**L**/**F**/**B** to the faces toward screen up/down/left/right/toward camera/away using the current camera); **M**/**E**/**S** stay fixed WCA; persist choice in `localStorage`.
+
 ## [0.4.29] - 2026-04-03
 
 ### Changed

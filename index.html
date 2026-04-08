@@ -107,6 +107,11 @@
       outline: none;
       border-color: rgba(0, 220, 255, 0.55);
     }
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
     #scramble-panel, #solve-panel {
       width: 100%;
       max-width: 720px;
@@ -260,7 +265,9 @@
     <h3>KEYBOARD</h3>
     <div><kbd>U</kbd> <kbd>D</kbd> <kbd>R</kbd> <kbd>L</kbd> <kbd>F</kbd> <kbd>B</kbd> — quarter turn clockwise</div>
     <div><kbd>Shift</kbd> + that key — counter‑clockwise</div>
-    <div><kbd>M</kbd> <kbd>E</kbd> <kbd>S</kbd> — middle slices (<kbd>Shift</kbd> reverses)</div>
+    <div><kbd>M</kbd> <kbd>E</kbd> <kbd>S</kbd> — middle slices (<kbd>Shift</kbd> reverses); in <strong>View</strong> key mode these stay fixed WCA</div>
+    <div><kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> or <kbd>Ctrl</kbd>+<kbd>Y</kbd> redo</div>
+    <div style="margin-top:6px"><strong>Keys</strong> menu: <strong>WCA</strong> = keys match fixed faces; <strong>View</strong> = <kbd>U</kbd>/<kbd>D</kbd>/<kbd>R</kbd>/<kbd>L</kbd>/<kbd>F</kbd>/<kbd>B</kbd> follow camera (toward you / screen edges). Undo/redo disabled while solution playback is open.</div>
     <h3 style="margin-top:10px">POINTER</h3>
     <div>Left drag: orbit · Right drag: pan · Wheel: zoom</div>
     <div>Drag on a sticker: twist (direction follows swipe)</div>
@@ -289,6 +296,15 @@
           <option value="L">L — orange</option>
         </select>
       </div>
+      <div class="hud-topface">
+        <label for="keyboard-mode-select">Keys</label>
+        <select id="keyboard-mode-select" aria-label="Keyboard mapping: fixed WCA or view relative">
+          <option value="wca">WCA fixed</option>
+          <option value="view">View</option>
+        </select>
+      </div>
+      <button type="button" class="btn secondary" id="btn-undo" disabled>Undo</button>
+      <button type="button" class="btn secondary" id="btn-redo" disabled>Redo</button>
       <button type="button" class="btn" id="btn-scramble">Scramble</button>
       <button type="button" class="btn secondary" id="btn-show-scramble">Show Scramble</button>
       <button type="button" class="btn secondary" id="btn-show-solve">Show Solve</button>
@@ -342,6 +358,16 @@
   }
 
   const TOP_FACE_STORAGE_KEY = 'charlie-rubiks-top-face';
+  const KEYBOARD_MODE_STORAGE_KEY = 'charlie-rubiks-keyboard-mode';
+  /** Outward world normals for WCA faces (+Y up, +Z front); used for view-relative key mapping. */
+  const FACE_WORLD_NORMAL = {
+    U: new THREE.Vector3(0, 1, 0),
+    D: new THREE.Vector3(0, -1, 0),
+    F: new THREE.Vector3(0, 0, 1),
+    B: new THREE.Vector3(0, 0, -1),
+    R: new THREE.Vector3(1, 0, 0),
+    L: new THREE.Vector3(-1, 0, 0)
+  };
   /** WCA face → world axis that becomes camera “up” (outward normal from cube center). */
   const TOP_FACE_UP = {
     U: [0, 1, 0],
@@ -410,6 +436,10 @@
   let lastScrambleNotation = '';
   let userMoveDuringSession = false;
   let wasEverUnsolved = false;
+  const undoStack = [];
+  const redoStack = [];
+  /** `'wca'` = keys map to fixed faces; `'view'` = U/D/R/L/F/B follow camera. */
+  let keyboardMode = 'wca';
 
   const faceNames = ['U', 'D', 'F', 'B', 'R', 'L'];
   let stickers = [];
@@ -513,6 +543,85 @@
   function invertMove(m) {
     if (m.double) return { face: m.face, prime: false, double: true };
     return { face: m.face, prime: !m.prime, double: false };
+  }
+
+  function loadKeyboardModePreference() {
+    try {
+      const v = String(localStorage.getItem(KEYBOARD_MODE_STORAGE_KEY) || '').toLowerCase();
+      return v === 'view' ? 'view' : 'wca';
+    } catch (e) {
+      return 'wca';
+    }
+  }
+
+  function saveKeyboardModePreference(mode) {
+    keyboardMode = mode === 'view' ? 'view' : 'wca';
+    try {
+      localStorage.setItem(KEYBOARD_MODE_STORAGE_KEY, keyboardMode);
+    } catch (e) { /* ignore */ }
+  }
+
+  /**
+   * Map key labels U,D,R,L,F,B to WCA faces for the current camera (sequential picks so keys stay distinct).
+   */
+  function getViewRelativeKeyToWcaMap() {
+    if (!camera || !controls) return null;
+    const towardCam = new THREE.Vector3().subVectors(camera.position, controls.target).normalize();
+    const upW = camera.up.clone().normalize();
+    const viewDir = new THREE.Vector3().subVectors(controls.target, camera.position).normalize();
+    const rightW = new THREE.Vector3().crossVectors(upW, viewDir).normalize();
+    const faces = ['U', 'D', 'F', 'B', 'R', 'L'];
+    const used = new Set();
+    function pickMax(metric) {
+      let best = null;
+      let bestV = -Infinity;
+      for (let i = 0; i < faces.length; i++) {
+        const f = faces[i];
+        if (used.has(f)) continue;
+        const v = metric(f);
+        if (v > bestV || (v === bestV && (best === null || f < best))) {
+          bestV = v;
+          best = f;
+        }
+      }
+      if (best == null) return null;
+      used.add(best);
+      return best;
+    }
+    function pickMin(metric) {
+      let best = null;
+      let bestV = Infinity;
+      for (let i = 0; i < faces.length; i++) {
+        const f = faces[i];
+        if (used.has(f)) continue;
+        const v = metric(f);
+        if (v < bestV || (v === bestV && (best === null || f < best))) {
+          bestV = v;
+          best = f;
+        }
+      }
+      if (best == null) return null;
+      used.add(best);
+      return best;
+    }
+    function dotToward(f) { return FACE_WORLD_NORMAL[f].dot(towardCam); }
+    function dotUp(f) { return FACE_WORLD_NORMAL[f].dot(upW); }
+    function dotRight(f) { return FACE_WORLD_NORMAL[f].dot(rightW); }
+    const mapF = pickMax(dotToward);
+    const mapB = pickMin(dotToward);
+    const mapU = pickMax(dotUp);
+    const mapD = pickMin(dotUp);
+    const mapR = pickMax(dotRight);
+    const mapL = pickMin(dotRight);
+    if (!mapF || !mapB || !mapU || !mapD || !mapR || !mapL) return null;
+    return { U: mapU, D: mapD, R: mapR, L: mapL, F: mapF, B: mapB };
+  }
+
+  function viewKeyLetterToWcaFace(keyLetter) {
+    if (keyboardMode !== 'view' || 'MES'.indexOf(keyLetter) >= 0) return keyLetter;
+    const m = getViewRelativeKeyToWcaMap();
+    if (!m || !m[keyLetter]) return keyLetter;
+    return m[keyLetter];
   }
 
   function parseKociembaSolutionString(str) {
@@ -794,9 +903,9 @@
     c.userData.iz = Math.max(-1, Math.min(1, c.userData.iz));
   }
 
-  function animateSlice(move, duration, countMove, onDone) {
+  function animateSlice(move, duration, countMove, onDone, recordUndo) {
     const list = getSliceCubies(move.face);
-    if (!list.length) { onDone(); updateWatchButton(); return; }
+    if (!list.length) { onDone(); updateWatchButton(); updateUndoRedoUi(); return; }
     const { axis, angle } = getAxisAngle(move);
     pivot.quaternion.set(0, 0, 0, 1);
     list.forEach(mesh => pivot.attach(mesh));
@@ -829,16 +938,24 @@
           runCelebrationPulse();
           showSolvedOverlay();
         }
+        if (recordUndo) {
+          undoStack.push(move);
+          redoStack.length = 0;
+        }
+        /* onDone clears animating / runs pumpQueue; must run before updateUndoRedoUi or busy stays true. */
         onDone();
+        updateUndoRedoUi();
         updateWatchButton();
       }
     }
     requestAnimationFrame(tick);
   }
 
-  function enqueue(move, duration, countMove) {
+  function enqueue(move, duration, countMove, opts) {
+    opts = opts || {};
+    const recordUndo = !!opts.recordUndo;
     return new Promise(res => {
-      moveQueue.push({ move, duration, countMove, res });
+      moveQueue.push({ move, duration, countMove, res, recordUndo });
       pumpQueue();
     });
   }
@@ -846,12 +963,12 @@
   function pumpQueue() {
     if (animating || !moveQueue.length) return;
     animating = true;
-    const { move, duration, countMove, res } = moveQueue.shift();
+    const { move, duration, countMove, res, recordUndo } = moveQueue.shift();
     animateSlice(move, duration, countMove, () => {
       animating = false;
       res();
       pumpQueue();
-    });
+    }, recordUndo);
   }
 
   function buildCubie(ix, iy, iz) {
@@ -932,6 +1049,15 @@
     const topFaceInitial = loadTopFacePreference();
     if (topFaceSelect) topFaceSelect.value = topFaceInitial;
     applyTopFaceOrientation(topFaceInitial);
+
+    keyboardMode = loadKeyboardModePreference();
+    const keyboardModeSelect = document.getElementById('keyboard-mode-select');
+    if (keyboardModeSelect) {
+      keyboardModeSelect.value = keyboardMode === 'view' ? 'view' : 'wca';
+      keyboardModeSelect.addEventListener('change', function () {
+        saveKeyboardModePreference(keyboardModeSelect.value);
+      });
+    }
 
     if (typeof ResizeObserver !== 'undefined') {
       const ro = new ResizeObserver(function () {
@@ -1056,7 +1182,7 @@
       if (drag.touchId != null && !mostlyHorizontal) move.prime = !move.prime;
 
       userMoveDuringSession = true;
-      enqueue(move, 300, true);
+      enqueue(move, 300, true, { recordUndo: true });
       drag = null;
     }
 
@@ -1137,6 +1263,7 @@
     onResize();
     animate();
     updateWatchButton();
+    updateUndoRedoUi();
     selfTestSliceCycles();
     syncCubieMeshesToSolverCube();
     ensureCubeWorkerReady().catch(function () {
@@ -1160,12 +1287,24 @@
   const keyMap = { KeyU: 'U', KeyD: 'D', KeyR: 'R', KeyL: 'L', KeyF: 'F', KeyB: 'B', KeyM: 'M', KeyE: 'E', KeyS: 'S' };
 
   function onKeyDown(e) {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+    if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {
+      e.preventDefault();
+      if (e.shiftKey) void redoMove();
+      else void undoMove();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.code === 'KeyY') {
+      e.preventDefault();
+      void redoMove();
+      return;
+    }
     const face = keyMap[e.code];
     if (!face) return;
     e.preventDefault();
     userMoveDuringSession = true;
-    enqueue(parseMoveKey(face, e.shiftKey), 300, true);
+    const wcaFace = viewKeyLetterToWcaFace(face);
+    enqueue(parseMoveKey(wcaFace, e.shiftKey), 300, true, { recordUndo: true });
   }
 
   function randomMove() {
@@ -1183,6 +1322,39 @@
   let watchCursor = 0;
   let watchStepBusy = false;
 
+  function watchPlaybackBlocksUndo() {
+    return watchMoves.length > 0;
+  }
+
+  function updateUndoRedoUi() {
+    const u = document.getElementById('btn-undo');
+    const r = document.getElementById('btn-redo');
+    const block = watchPlaybackBlocksUndo();
+    const busy = animating || moveQueue.length > 0;
+    if (u) u.disabled = block || undoStack.length === 0 || busy;
+    if (r) r.disabled = block || redoStack.length === 0 || busy;
+  }
+
+  async function undoMove() {
+    if (animating || moveQueue.length || watchPlaybackBlocksUndo() || !undoStack.length) return;
+    const m = undoStack.pop();
+    redoStack.push(m);
+    await enqueue(invertMove(m), 300, false);
+    if (moveCount > 0) {
+      moveCount--;
+      document.getElementById('move-count').textContent = String(moveCount);
+    }
+    updateUndoRedoUi();
+  }
+
+  async function redoMove() {
+    if (animating || moveQueue.length || watchPlaybackBlocksUndo() || !redoStack.length) return;
+    const m = redoStack.pop();
+    await enqueue(m, 300, true, { recordUndo: false });
+    undoStack.push(m);
+    updateUndoRedoUi();
+  }
+
   function showWatchPlaybackBar() {
     const bar = document.getElementById('watch-bar');
     if (bar) bar.classList.add('active');
@@ -1190,6 +1362,7 @@
     if (totalEl) totalEl.textContent = String(watchMoves.length);
     syncWatchPauseButton();
     updateWatchPlaybackUi();
+    updateUndoRedoUi();
   }
 
   function hideWatchPlaybackBar() {
@@ -1202,6 +1375,7 @@
     if (bar) bar.classList.remove('active');
     syncWatchPauseButton();
     updateWatchPlaybackUi();
+    updateUndoRedoUi();
   }
 
   function updateWatchPlaybackUi() {
@@ -1367,6 +1541,9 @@
   async function runScramble() {
     document.getElementById('btn-scramble').disabled = true;
     hideWatchPlaybackBar();
+    undoStack.length = 0;
+    redoStack.length = 0;
+    updateUndoRedoUi();
     scrambleMoves = [];
     for (let i = 0; i < 20; i++) {
       let m;
@@ -1407,6 +1584,9 @@
     document.getElementById('scramble-panel').classList.remove('open');
     document.getElementById('solve-panel').classList.remove('open');
     hideWatchPlaybackBar();
+    undoStack.length = 0;
+    redoStack.length = 0;
+    updateUndoRedoUi();
     wasEverUnsolved = false;
     document.getElementById('solved-overlay').classList.remove('visible');
     updateWatchButton();
@@ -1455,6 +1635,8 @@
   document.getElementById('btn-watch-prev').addEventListener('click', () => { void onWatchPrevClick(); });
   document.getElementById('btn-watch-next').addEventListener('click', () => { void onWatchNextClick(); });
   document.getElementById('btn-reset').addEventListener('click', resetCube);
+  document.getElementById('btn-undo').addEventListener('click', function () { void undoMove(); });
+  document.getElementById('btn-redo').addEventListener('click', function () { void redoMove(); });
   const topFaceSelectEl = document.getElementById('top-face-select');
   if (topFaceSelectEl) {
     topFaceSelectEl.addEventListener('change', function () {
