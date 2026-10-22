@@ -5,6 +5,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.4.32] - 2026-10-22
+
+### Fixed
+
+- Bottom-layer (`D`) and horizontal middle-slice (`E`) quarter turns now animate in the same direction as the logical cube state, preventing sticker colors from jumping at the end of a turn, including inverse turns and solve playback.
+- Sticker-drag direction now follows the selected slice's motion on screen, replacing face-specific and touch-specific direction flips that could turn a row against the swipe.
+- Add regression coverage comparing all 54 animated sticker positions with the final colors for every face and middle slice, including scrambled states, inverse moves, half turns, and repeated turns. Correct the older solver test's bottom-face indexing to match the game.
+
 ## [0.4.31] - 2026-04-08
 
 ### Fixed

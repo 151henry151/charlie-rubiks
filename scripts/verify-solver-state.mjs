@@ -62,7 +62,7 @@ function faceletAtCubieFace(str, ix, iy, iz, matIdx) {
   if (matIdx === 0 && ix === 1) return str[9 * 1 + (1 - iy) * 3 + (1 - iz)];
   if (matIdx === 1 && ix === -1) return str[9 * 4 + (1 - iy) * 3 + (iz + 1)];
   if (matIdx === 2 && iy === 1) return str[9 * 0 + (iz + 1) * 3 + (ix + 1)];
-  if (matIdx === 3 && iy === -1) return str[9 * 3 + (iz + 1) * 3 + (ix + 1)];
+  if (matIdx === 3 && iy === -1) return str[9 * 3 + (1 - iz) * 3 + (ix + 1)];
   if (matIdx === 4 && iz === 1) return str[9 * 2 + (1 - iy) * 3 + (ix + 1)];
   if (matIdx === 5 && iz === -1) return str[9 * 5 + (1 - iy) * 3 + (1 - ix)];
   return null;

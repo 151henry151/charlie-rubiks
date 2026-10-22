@@ -498,7 +498,8 @@
 
   /**
    * Snap cubies to the grid and repaint materials from solverCube (cubejs facelet string).
-   * Slice animations follow the pre–cubejs sticker model; logical state is driven by cubejs, so without this the mesh desyncs.
+   * Rebase materials to identity orientation after each turn. getAxisAngle must land
+   * every sticker at its solver position so this rebase makes no visible change.
    */
   function syncCubieMeshesToSolverCube() {
     if (!solverCube || typeof Cube === 'undefined' || !cubies || !cubies.length) return;
@@ -757,7 +758,8 @@
     const ax = new THREE.Vector3();
     let sign = 1;
     switch (move.face) {
-      case 'U': case 'D': case 'E': ax.set(0, 1, 0); sign = 1; break;
+      case 'U': ax.set(0, 1, 0); sign = 1; break;
+      case 'D': case 'E': ax.set(0, 1, 0); sign = -1; break;
       case 'R': ax.set(1, 0, 0); sign = 1; break;
       case 'L': case 'M': ax.set(1, 0, 0); sign = -1; break;
       case 'F': case 'S': ax.set(0, 0, 1); sign = 1; break;
@@ -765,20 +767,11 @@
       default: ax.set(0, 1, 0);
     }
     /*
-     * Negative sign: Three.js +axis-angle must match cubejs `Cube.moves` chirality. A positive angle
-     * here was rotating slices opposite the sticker update, so meshes matched at t=1-ε but jumped when
-     * sync repainted from solver state.
+     * Clockwise is viewed from outside the turning face. D turns opposite U;
+     * E follows D, just as M follows L and S follows F. Keep this rotation in
+     * agreement with cubejs so the final material rebase cannot jump colors.
      */
     return { axis: ax, angle: -k * h * sign };
-  }
-
-  function orthonormalTangentBasis(n) {
-    const up = new THREE.Vector3(0, 1, 0);
-    let t1 = new THREE.Vector3().crossVectors(n, up);
-    if (t1.lengthSq() < 1e-10) t1 = new THREE.Vector3().crossVectors(n, new THREE.Vector3(1, 0, 0));
-    t1.normalize();
-    const t2 = new THREE.Vector3().crossVectors(n, t1).normalize();
-    return [t1, t2];
   }
 
   function worldToScreenPixel(v, cam, el) {
@@ -786,6 +779,20 @@
     const w = el.clientWidth;
     const h = el.clientHeight;
     return new THREE.Vector2((p.x + 1) * 0.5 * w, (-p.y + 1) * 0.5 * h);
+  }
+
+  /** Pick the turn whose motion at the grabbed sticker follows the screen swipe. */
+  function moveFromSwipe(face, origin, dragPix, cam, el) {
+    const move = { face, prime: false, double: false };
+    const { axis, angle } = getAxisAngle(move);
+    // Angular velocity × position gives the sticker's instantaneous direction.
+    const tangent = new THREE.Vector3().crossVectors(axis, origin).multiplyScalar(Math.sign(angle) * 0.1);
+    const start = worldToScreenPixel(origin, cam, el);
+    const motion = worldToScreenPixel(origin.clone().add(tangent), cam, el).sub(start);
+    const alignment = motion.dot(dragPix);
+    if (Math.abs(alignment) < 1e-6) return null;
+    move.prime = alignment < 0;
+    return move;
   }
 
   function isSolvedStickers() {
@@ -840,22 +847,6 @@
     if (Math.abs(n.y) >= Math.abs(n.x) && Math.abs(n.y) >= Math.abs(n.z)) return n.y > 0 ? 'U' : 'D';
     if (Math.abs(n.z) >= Math.abs(n.x)) return n.z > 0 ? 'F' : 'B';
     return n.x > 0 ? 'R' : 'L';
-  }
-
-  /** Outward world normal for the face that turns (for tangent basis / prime). */
-  function worldNormalForTurnFace(face) {
-    switch (face) {
-      case 'U': return new THREE.Vector3(0, 1, 0);
-      case 'D': return new THREE.Vector3(0, -1, 0);
-      case 'R': return new THREE.Vector3(1, 0, 0);
-      case 'L': return new THREE.Vector3(-1, 0, 0);
-      case 'F': return new THREE.Vector3(0, 0, 1);
-      case 'B': return new THREE.Vector3(0, 0, -1);
-      case 'M': return new THREE.Vector3(1, 0, 0);
-      case 'E': return new THREE.Vector3(0, 1, 0);
-      case 'S': return new THREE.Vector3(0, 0, 1);
-      default: return new THREE.Vector3(0, 0, 1);
-    }
   }
 
   /**
@@ -1141,45 +1132,12 @@
       controls.enabled = true;
       if (dist < 15) { drag = null; return; }
 
-      /* Touch: invert screen Y (see 0.4.8); use same tdy for horiz vs vert classification. */
-      const tdy = drag.touchId != null ? -dy : dy;
-      const mostlyHorizontal = Math.abs(dx) >= Math.abs(tdy);
-      const dragPix = new THREE.Vector2(dx, tdy);
-
+      // Mouse and touch both use client coordinates (screen Y increases downward).
+      const mostlyHorizontal = Math.abs(dx) >= Math.abs(dy);
+      const dragPix = new THREE.Vector2(dx, dy);
       const face = pickSliceFromStickerSwipe(drag.faceIdx, drag.ix, drag.iy, drag.iz, mostlyHorizontal);
-      const nTurn = worldNormalForTurnFace(face);
-      const [e1, e2] = orthonormalTangentBasis(nTurn);
-      const origin = drag.hitPoint;
-      const el = renderer.domElement;
-      const eps = 0.38;
-      const s0 = worldToScreenPixel(origin, camera, el);
-      const s1 = worldToScreenPixel(origin.clone().add(e1.clone().multiplyScalar(eps)), camera, el);
-      const s2 = worldToScreenPixel(origin.clone().add(e2.clone().multiplyScalar(eps)), camera, el);
-      let u1 = s1.clone().sub(s0);
-      let u2 = s2.clone().sub(s0);
-      if (u1.lengthSq() < 1e-8 || u2.lengthSq() < 1e-8) { drag = null; return; }
-      u1.normalize();
-      u2.sub(u1.clone().multiplyScalar(u2.dot(u1)));
-      if (u2.lengthSq() < 1e-10) { drag = null; return; }
-      u2.normalize();
-
-      const a = dragPix.dot(u1);
-      const b = dragPix.dot(u2);
-      if (Math.abs(a) < 1e-6 && Math.abs(b) < 1e-6) { drag = null; return; }
-
-      const useFirst = Math.abs(a) >= Math.abs(b);
-      const sign = useFirst ? Math.sign(a) || 1 : Math.sign(b) || 1;
-      const tangent = useFirst ? e1.clone().multiplyScalar(sign) : e2.clone().multiplyScalar(sign);
-      const viewDir = new THREE.Vector3().subVectors(camera.position, origin).normalize();
-      const rotPole = new THREE.Vector3().crossVectors(nTurn, tangent);
-      let prime = rotPole.dot(viewDir) < 0;
-      const move = { face, prime, double: false };
-      if (face === 'D' || face === 'B' || face === 'L') move.prime = !move.prime;
-      /*
-       * Touch uses inverted screen Y (tdy). After getAxisAngle was negated (0.4.25), vertical swipes
-       * need a prime invert; horizontal swipes do not (inverting both made horizontals backwards).
-       */
-      if (drag.touchId != null && !mostlyHorizontal) move.prime = !move.prime;
+      const move = moveFromSwipe(face, drag.hitPoint, dragPix, camera, renderer.domElement);
+      if (!move) { drag = null; return; }
 
       userMoveDuringSession = true;
       enqueue(move, 300, true, { recordUndo: true });
